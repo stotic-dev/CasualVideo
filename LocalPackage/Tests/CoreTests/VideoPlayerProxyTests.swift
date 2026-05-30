@@ -14,72 +14,72 @@ import Testing
 
 @testable import Core
 
-// MARK: - prepareForBackgroundPlayback
-
 @MainActor
-@Test("prepareForBackgroundPlayback は注入したクロージャへ委譲される")
-func prepareForBackgroundPlayback_invokesInjectedClosure() {
-    let called = Box(false)
-    let proxy = VideoPlayerProxy(
-        prepareForBackgroundPlayback: { called.value = true }
-    )
+struct VideoPlayerProxyTests {
+    
+    // MARK: - prepareForBackgroundPlayback
 
-    proxy.prepareForBackgroundPlayback()
+    @Test("prepareForBackgroundPlayback は注入したクロージャへ委譲される")
+    func prepareForBackgroundPlayback_invokesInjectedClosure() {
+        let called = Box(false)
+        let proxy = VideoPlayerProxy(
+            prepareForBackgroundPlayback: { called.value = true }
+        )
 
-    #expect(called.value)
-}
+        proxy.prepareForBackgroundPlayback()
 
-@MainActor
-@Test("デフォルトの prepareForBackgroundPlayback は何もせずクラッシュしない")
-func prepareForBackgroundPlayback_defaultIsNoop() {
-    let proxy = VideoPlayerProxy()
-    // デフォルト実装（{}）が呼んでもクラッシュしないことを確認する。
-    proxy.prepareForBackgroundPlayback()
-}
+        #expect(called.value)
+    }
 
-// MARK: - 再生開始シーケンス（start() が踏む順序）
+    @Test("デフォルトの prepareForBackgroundPlayback は何もせずクラッシュしない")
+    func prepareForBackgroundPlayback_defaultIsNoop() {
+        let proxy = VideoPlayerProxy()
+        // デフォルト実装（{}）が呼んでもクラッシュしないことを確認する。
+        proxy.prepareForBackgroundPlayback()
+    }
 
-@MainActor
-@Test("再生準備では prepareForBackgroundPlayback が loadAndPlay より先に呼ばれる")
-func backgroundPlaybackPreparation_precedesLoadAndPlay() async {
-    // VideoPlayerScreen.start() が踏むシーケンスと同じ順序を Proxy 経由で再現し、
-    // オーディオセッション構成が再生開始（loadAndPlay）より前に行われることを検証する。
-    let order = Box<[String]>([])
-    let proxy = VideoPlayerProxy(
-        loadAndPlay: { _ in
-            await MainActor.run { order.value.append("loadAndPlay") }
-            return true
-        },
-        prepareForBackgroundPlayback: { order.value.append("prepare") }
-    )
+    // MARK: - 再生開始シーケンス（start() が踏む順序）
 
-    proxy.prepareForBackgroundPlayback()
-    _ = await proxy.loadAndPlay("asset-id")
+    @Test("再生準備では prepareForBackgroundPlayback が loadAndPlay より先に呼ばれる")
+    func backgroundPlaybackPreparation_precedesLoadAndPlay() async {
+        // VideoPlayerScreen.start() が踏むシーケンスと同じ順序を Proxy 経由で再現し、
+        // オーディオセッション構成が再生開始（loadAndPlay）より前に行われることを検証する。
+        let order = Box<[String]>([])
+        let proxy = VideoPlayerProxy(
+            loadAndPlay: { _ in
+                await MainActor.run { order.value.append("loadAndPlay") }
+                return true
+            },
+            prepareForBackgroundPlayback: { order.value.append("prepare") }
+        )
 
-    #expect(order.value == ["prepare", "loadAndPlay"])
-}
+        proxy.prepareForBackgroundPlayback()
+        _ = await proxy.loadAndPlay("asset-id")
 
-// MARK: - その他の操作委譲（回帰防止）
+        #expect(order.value == ["prepare", "loadAndPlay"])
+    }
 
-@MainActor
-@Test("play / pause / setMuted も注入したクロージャへ委譲される")
-func playerOperations_invokeInjectedClosures() {
-    let played = Box(false)
-    let paused = Box(false)
-    let muted = Box<Bool?>(nil)
-    let proxy = VideoPlayerProxy(
-        play: { played.value = true },
-        pause: { paused.value = true },
-        setMuted: { muted.value = $0 }
-    )
+    // MARK: - その他の操作委譲（回帰防止）
 
-    proxy.play()
-    proxy.pause()
-    proxy.setMuted(true)
+    @Test("play / pause / setMuted も注入したクロージャへ委譲される")
+    func playerOperations_invokeInjectedClosures() {
+        let played = Box(false)
+        let paused = Box(false)
+        let muted = Box<Bool?>(nil)
+        let proxy = VideoPlayerProxy(
+            play: { played.value = true },
+            pause: { paused.value = true },
+            setMuted: { muted.value = $0 }
+        )
 
-    #expect(played.value)
-    #expect(paused.value)
-    #expect(muted.value == true)
+        proxy.play()
+        proxy.pause()
+        proxy.setMuted(true)
+
+        #expect(played.value)
+        #expect(paused.value)
+        #expect(muted.value == true)
+    }
 }
 
 // MARK: - Test utility
