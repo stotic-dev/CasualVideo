@@ -13,15 +13,15 @@ let infra = AppTarget(
     name: "Infra",
     dependencies: []
 )
-let mainFeature = AppTarget(
-    name: "Main",
-    testTargetName: "MainTests",
+let libraryFeature = AppTarget(
+    name: "Library",
+    testTargetName: "LibraryTests",
     dependencies: [core]
 )
 
 let app = AppTarget(
     name: "App",
-    dependencies: [mainFeature, core, infra]
+    dependencies: [libraryFeature, core, infra]
 )
 
 
@@ -42,9 +42,9 @@ let package = Package(
             dependencies: app.targetDependencies
         ),
         .target(
-            name: mainFeature.name,
-            dependencies: mainFeature.targetDependencies,
-            path: "Sources/Features/Main"
+            name: libraryFeature.name,
+            dependencies: libraryFeature.targetDependencies,
+            path: "Sources/Features/Library"
         ),
         .target(
             name: core.name
@@ -53,8 +53,8 @@ let package = Package(
             name: infra.name
         ),
         .testTarget(
-            name: mainFeature.testTargetName!,
-            dependencies: mainFeature.testDependencies
+            name: libraryFeature.testTargetName!,
+            dependencies: libraryFeature.testDependencies
         ),
         .testTarget(
             name: core.testTargetName!,
