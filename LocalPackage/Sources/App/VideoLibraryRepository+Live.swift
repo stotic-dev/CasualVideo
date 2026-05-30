@@ -24,6 +24,9 @@ extension VideoLibraryRepository {
             },
             loadThumbnail: { id, size in
                 await client.loadThumbnail(localIdentifier: id, size: size)
+            },
+            loadPlayerItem: { id in
+                await client.loadPlayerItem(localIdentifier: id)
             }
         )
     }

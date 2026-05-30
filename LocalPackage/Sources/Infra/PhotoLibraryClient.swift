@@ -6,6 +6,7 @@
 //  許可リクエスト・動画アセット取得・サムネイル取得などプロセス外依存への I/O を閉じ込める。
 //
 
+import AVFoundation
 import CoreGraphics
 import Foundation
 import Photos
@@ -85,6 +86,26 @@ public struct PhotoLibraryClient: Sendable {
         await thumbnails.thumbnail(localIdentifier: localIdentifier, size: size)
     }
 
+    /// 指定アセットの再生用 `AVPlayerItem` を非同期に取得する（F-2）。
+    ///
+    /// iCloud 上の動画もネットワーク経由で再生できるよう `isNetworkAccessAllowed` を有効にする。
+    /// 取得できない（アセットが存在しない／再生不可）場合は nil。
+    public func loadPlayerItem(localIdentifier: String) async -> sending AVPlayerItem? {
+        let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [localIdentifier], options: nil)
+        guard let asset = fetch.firstObject else { return nil }
+
+        let options = PHVideoRequestOptions()
+        options.isNetworkAccessAllowed = true
+        options.deliveryMode = .automatic
+
+        let box: PlayerItemBox = await withCheckedContinuation { continuation in
+            PHImageManager.default().requestPlayerItem(forVideo: asset, options: options) { item, _ in
+                continuation.resume(returning: PlayerItemBox(item: item))
+            }
+        }
+        return box.item
+    }
+
     private static func normalize(_ status: PHAuthorizationStatus) -> PhotoLibraryAuthorization {
         switch status {
         case .authorized, .limited:
@@ -99,6 +120,14 @@ public struct PhotoLibraryClient: Sendable {
             .denied
         }
     }
+}
+
+/// 非 Sendable な `AVPlayerItem` を `withCheckedContinuation` の境界越しに受け渡すためのボックス。
+///
+/// PhotoKit のコールバックは任意のキューで呼ばれるため、結果を一旦この Sendable な箱に詰めてから
+/// 呼び出し側へ返す。`AVPlayerItem` は単一参照で外部共有しないため `@unchecked Sendable` とする。
+private struct PlayerItemBox: @unchecked Sendable {
+    let item: AVPlayerItem?
 }
 
 /// サムネイルの取得と、`localIdentifier + size` をキーにしたメモリキャッシュを担う。
