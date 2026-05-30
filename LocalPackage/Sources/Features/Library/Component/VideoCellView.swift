@@ -11,10 +11,10 @@ import SwiftUI
 struct VideoCellView: View {
 
     let video: VideoAsset
-    let store: VideoLibraryStore
 
-    @State private var thumbnail: CGImage?
+    @Environment(\.videoLibraryRepository) private var repository
     @Environment(\.displayScale) private var displayScale
+    @State private var thumbnail: CGImage?
 
     var body: some View {
         GeometryReader { proxy in
@@ -34,7 +34,7 @@ struct VideoCellView: View {
                     width: proxy.size.width * displayScale,
                     height: proxy.size.height * displayScale
                 )
-                thumbnail = await store.thumbnail(for: video.id, size: pixelSize)
+                thumbnail = await repository.loadThumbnail(video.id, pixelSize)
             }
         }
     }

@@ -38,6 +38,9 @@ public enum PhotoLibraryAuthorization: Sendable, Hashable {
 /// PhotoKit と直接やりとりするクライアント。
 public struct PhotoLibraryClient: Sendable {
 
+    /// サムネイル取得とそのメモリキャッシュを担う。
+    private let thumbnails = ThumbnailImageManager()
+
     public init() {}
 
     /// 現在のアクセス許可状態を返す。
@@ -75,16 +78,64 @@ public struct PhotoLibraryClient: Sendable {
     }
 
     /// 指定アセットのサムネイルを非同期に取得する。iCloud 上の動画も取得対象とする。
+    ///
+    /// 同一 `id + size` の再取得はメモリキャッシュから返すため、再表示・スクロール往復で
+    /// PhotoKit への問い合わせは発生しない。
     public func loadThumbnail(localIdentifier: String, size: CGSize) async -> CGImage? {
+        await thumbnails.thumbnail(localIdentifier: localIdentifier, size: size)
+    }
+
+    private static func normalize(_ status: PHAuthorizationStatus) -> PhotoLibraryAuthorization {
+        switch status {
+        case .authorized, .limited:
+            .authorized
+        case .denied:
+            .denied
+        case .restricted:
+            .restricted
+        case .notDetermined:
+            .notDetermined
+        @unknown default:
+            .denied
+        }
+    }
+}
+
+/// サムネイルの取得と、`localIdentifier + size` をキーにしたメモリキャッシュを担う。
+///
+/// `NSCache` / `PHCachingImageManager` はいずれもスレッドセーフなため、
+/// 値型 `PhotoLibraryClient` から安全に共有できるよう `@unchecked Sendable` とする。
+private final class ThumbnailImageManager: @unchecked Sendable {
+
+    /// 取得済みサムネイルのメモリキャッシュ。メモリ逼迫時は OS が自動で破棄する。
+    private let cache = NSCache<NSString, CGImage>()
+
+    /// PhotoKit の画像取得マネージャ。将来の先読み（startCachingImages）拡張も見据えて保持する。
+    private let manager = PHCachingImageManager()
+
+    /// サムネイルを返す。キャッシュにあれば PhotoKit へ問い合わせず即座に返す。
+    func thumbnail(localIdentifier: String, size: CGSize) async -> CGImage? {
+        let key = Self.cacheKey(localIdentifier: localIdentifier, size: size)
+        if let cached = cache.object(forKey: key) {
+            return cached
+        }
+
         let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [localIdentifier], options: nil)
         guard let asset = fetch.firstObject else { return nil }
 
+        let image = await requestImage(for: asset, size: size)
+        if let image {
+            cache.setObject(image, forKey: key)
+        }
+        return image
+    }
+
+    private func requestImage(for asset: PHAsset, size: CGSize) async -> CGImage? {
         let options = PHImageRequestOptions()
         options.isNetworkAccessAllowed = true
         options.deliveryMode = .opportunistic
         options.resizeMode = .fast
 
-        let manager = PHImageManager.default()
         return await withCheckedContinuation { continuation in
             var didResume = false
             manager.requestImage(
@@ -104,19 +155,9 @@ public struct PhotoLibraryClient: Sendable {
         }
     }
 
-    private static func normalize(_ status: PHAuthorizationStatus) -> PhotoLibraryAuthorization {
-        switch status {
-        case .authorized, .limited:
-            .authorized
-        case .denied:
-            .denied
-        case .restricted:
-            .restricted
-        case .notDetermined:
-            .notDetermined
-        @unknown default:
-            .denied
-        }
+    /// 同一アセットでもサイズが異なれば別画像として扱う。
+    private static func cacheKey(localIdentifier: String, size: CGSize) -> NSString {
+        "\(localIdentifier)#\(Int(size.width))x\(Int(size.height))" as NSString
     }
 }
 

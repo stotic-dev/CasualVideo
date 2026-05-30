@@ -73,7 +73,7 @@ struct AppTarget {
         dependencies.map { Target.Dependency(stringLiteral: $0.name) }
     }
     var testDependencies: [Target.Dependency] {
-        [.init(stringLiteral: name)]
+        [.init(stringLiteral: name)] + targetDependencies
     }
     
     init(name: String, testTargetName: String? = nil, dependencies: [AppTarget] = []) {

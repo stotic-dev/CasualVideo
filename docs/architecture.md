@@ -110,6 +110,14 @@ struct ProfileView: View {
 - Store も **`@Environment` で DI できるようにする**。`App` モジュールで `Repository` を assemble して Store をインスタンス化し、DI する。
   - `@Observable` なオブジェクトの注入・取得は、`EnvironmentValues` の key ではなく **オブジェクト型ベース**の `.environment(_:)` / `@Environment(_:)` を用いる。
 
+### Store は特定の画面に依存しない（UI 関連型を扱わない）
+
+- **Store は特定の画面に紐づく存在ではない。** 必要に応じて複数の画面から共有・再利用できるよう、ドメインの状態とロジックのみを持たせる。「○○画面の Store」という前提で画面都合の責務を持ち込まない。
+- そのため **Store は UI 関連型（`CGImage` / `UIImage` / SwiftUI の型など）を扱わない。** 状態・公開 API の入出力は、ドメインモデルや値型（`Core` の型）に限定する。
+  - 理由: UI 型を Store が持つと、(1) その画面専用になり再利用できない、(2) UI フレームワークへ依存して Store のテスタビリティ（`Core`/`Features` ロジックの純粋なテスト）が下がる、(3) レイヤーの責務境界が曖昧になる。
+- **画像など UI 都合のリソース取得は Store を経由しない。** View が `@Environment` で `Repository` を直接取り出し、View のライフサイクル（`.task` 等）で取得・保持する。
+  - 例: 動画一覧のサムネイル（`CGImage`）は、`Store` ではなく各セル View が `Repository.loadThumbnail` を直接呼んで `@State` に保持する。`Store` は `VideoAsset` などのドメイン状態のみを管理する。
+
 ```swift
 // Core: Store 定義（状態はカプセル化し、公開 API 経由で共有・更新）
 @MainActor
@@ -138,6 +146,10 @@ struct RootView: View {
     // ...
 }
 ```
+
+## SwiftUI 実装方針
+
+View の設計（Screen と presentational View の分離、副作用の置き場所、Preview / Snapshot 再現性）は [swiftui.md](swiftui.md) を参照すること。
 
 ## テスト方針
 

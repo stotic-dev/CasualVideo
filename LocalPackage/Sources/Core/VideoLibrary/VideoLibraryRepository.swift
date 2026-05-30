@@ -29,10 +29,10 @@ public struct VideoLibraryRepository: Sendable {
     public var loadThumbnail: @Sendable (_ id: VideoAsset.ID, _ size: CGSize) async -> CGImage?
 
     public init(
-        authorizationStatus: @escaping @Sendable () async -> VideoLibraryAuthorizationStatus,
-        requestAuthorization: @escaping @Sendable () async -> VideoLibraryAuthorizationStatus,
-        fetchVideos: @escaping @Sendable () async -> [VideoAsset],
-        loadThumbnail: @escaping @Sendable (_ id: VideoAsset.ID, _ size: CGSize) async -> CGImage?
+        authorizationStatus: @escaping @Sendable () async -> VideoLibraryAuthorizationStatus = { .authorized },
+        requestAuthorization: @escaping @Sendable () async -> VideoLibraryAuthorizationStatus = { .authorized },
+        fetchVideos: @escaping @Sendable () async -> [VideoAsset] = { [] },
+        loadThumbnail: @escaping @Sendable (_ id: VideoAsset.ID, _ size: CGSize) async -> CGImage? = { _, _ in nil }
     ) {
         self.authorizationStatus = authorizationStatus
         self.requestAuthorization = requestAuthorization

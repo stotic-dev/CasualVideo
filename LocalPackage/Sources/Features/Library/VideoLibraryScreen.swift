@@ -4,6 +4,10 @@
 //
 //  写真ライブラリの動画一覧画面（F-1）。
 //
+//  Screen と presentational View の分離方針は docs/swiftui.md を参照。
+//  - Screen（VideoLibraryScreen）: Environment から Store を取得し副作用を担う。
+//  - View（VideoLibraryView）: init で受け取った状態を表示するだけ。副作用を持たない。
+//
 
 import Core
 import SwiftUI
@@ -11,9 +15,7 @@ import SwiftUI
 /// 写真ライブラリの動画一覧画面。Feature の公開エントリ。
 public struct VideoLibraryScreen: View {
 
-    @Environment(\.videoLibraryRepository) private var repository
-
-    public init() {}
+    @Environment(VideoLibraryStore.self) var store
 
     /// App から構築する際のファクトリ。
     public static func make() -> some View {
@@ -21,71 +23,55 @@ public struct VideoLibraryScreen: View {
     }
 
     public var body: some View {
-        // Repository を環境から受け取り Store を生成する。
-        VideoLibraryContentView(store: VideoLibraryStore(repository: repository))
+        // Store のロード状態を UI の表示状態へ変換し、presentational View へ渡す。
+        VideoLibraryView(state: VideoLibraryViewState(loadState: store.loadState)) {
+            await store.reload()
+        }
+        .task {
+            // ライフサイクルに紐づく副作用は Screen 側に置く。
+            await store.load()
+        }
     }
 }
 
-private struct VideoLibraryContentView: View {
+/// 動画一覧の presentational View。init で受け取った状態を表示するだけで副作用を持たない。
+///
+/// Store や Repository に依存しないため、Preview / Snapshot テストで状態を直接注入して
+/// 各ケースを再現できる（docs/swiftui.md 参照）。
+struct VideoLibraryView: View {
 
-    @State private var store: VideoLibraryStore
-
-    init(store: VideoLibraryStore) {
-        self._store = State(initialValue: store)
-    }
+    let state: VideoLibraryViewState
+    /// 未許可状態からの再試行アクション。副作用の実体は Screen 側にある。
+    let onRetry: () async -> Void
 
     var body: some View {
         NavigationStack {
             content
                 .navigationTitle("動画")
         }
-        .task {
-            await store.onAppear()
-        }
     }
 
     @ViewBuilder
     private var content: some View {
-        switch store.state {
-        case .idle, .loading:
+        switch state {
+        case .loading:
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-        case .loaded(let videos):
-            if videos.isEmpty {
-                ContentUnavailableView(
-                    "動画がありません",
-                    systemImage: "video.slash",
-                    description: Text("写真ライブラリに動画が見つかりませんでした。")
-                )
-            } else {
-                VideoGridView(videos: videos, store: store)
-            }
+        case .empty:
+            ContentUnavailableView(
+                "動画がありません",
+                systemImage: "video.slash",
+                description: Text("写真ライブラリに動画が見つかりませんでした。")
+            )
+
+        case .videos(let videos):
+            VideoGridView(videos: videos)
 
         case .unauthorized(let status):
             VideoLibraryUnauthorizedView(status: status) {
-                Task { await store.reload() }
+                Task { await onRetry() }
             }
-        }
-    }
-}
-
-private struct VideoGridView: View {
-
-    let videos: [VideoAsset]
-    let store: VideoLibraryStore
-
-    private let columns = [GridItem(.adaptive(minimum: 100), spacing: 2)]
-
-    var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 2) {
-                ForEach(videos) { video in
-                    VideoCellView(video: video, store: store)
-                        .aspectRatio(1, contentMode: .fill)
-                }
-            }
-            .padding(2)
         }
     }
 }
