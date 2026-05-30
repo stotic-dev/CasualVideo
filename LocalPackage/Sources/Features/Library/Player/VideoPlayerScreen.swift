@@ -34,10 +34,6 @@ public struct VideoPlayerScreen: View {
                 // ライフサイクルに紐づく副作用（読み込み・再生開始）は Screen 側に置く。
                 await start()
             }
-            .onDisappear {
-                // 画面を離れたら再生を止める（操作は Proxy 経由）。
-                playerProxy.pause()
-            }
     }
 
     private var playerView: some View {
@@ -58,6 +54,9 @@ public struct VideoPlayerScreen: View {
     private func start() async {
         // 既に準備済みなら作り直さない（再表示時の二重ロード防止）。
         if case .ready = state { return }
+
+        // PIP・バックグラウンド再生（F-3）のためのオーディオセッションを再生前に構成する。
+        playerProxy.prepareForBackgroundPlayback()
 
         // ラフに「とりあえず流す」体験のため、読み込みと同時に自動再生する。
         let didLoad = await playerProxy.loadAndPlay(asset.id)
