@@ -5,7 +5,7 @@
 //  再生画面の表示状態。
 //
 
-import AVKit
+import AVFoundation
 
 /// 再生画面の表示状態。
 ///

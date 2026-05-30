@@ -5,13 +5,13 @@
 //  一覧から選んだ動画を再生する再生画面（F-2）。
 //
 //  Screen と presentational View の分離方針は docs/swiftui.md を参照。
-//  - Screen（VideoPlayerScreen）: Repository から再生リソース（AVPlayerItem）を取得する副作用を担う。
-//    サムネイルと同様、再生リソースは Store を介さず View が直接 Repository から取得する
-//    （docs/architecture.md の Store 方針: UI/フレームワーク型を Store に持ち込まない）。
+//  - Screen（VideoPlayerScreen）: 再生エンジンの操作（VideoPlayerProxy 経由）と、その副作用を担う。
+//    AVPlayer / AVPlayerItem を View 内で直接生成・操作せず、すべて Proxy へ委譲する
+//    （操作の責務は Infra の VideoPlayerClient に閉じ、UI 表示と分離する）。
 //  - View（VideoPlayerView）: 受け取った再生状態（VideoPlayerViewState）を表示するだけ。副作用を持たない。
 //
 
-import AVKit
+import AVFoundation
 import Core
 import SwiftUI
 
@@ -20,7 +20,7 @@ public struct VideoPlayerScreen: View {
 
     let asset: VideoAsset
 
-    @Environment(\.videoLibraryRepository) private var repository
+    @Environment(\.videoPlayerProxy) private var playerProxy
     @State private var state: VideoPlayerViewState = .loading
 
     public init(asset: VideoAsset) {
@@ -31,8 +31,12 @@ public struct VideoPlayerScreen: View {
         playerView
             .navigationTitle(navigationTitle)
             .task {
-                // ライフサイクルに紐づく副作用（再生リソースの取得）は Screen 側に置く。
-                await loadPlayerItem()
+                // ライフサイクルに紐づく副作用（読み込み・再生開始）は Screen 側に置く。
+                await start()
+            }
+            .onDisappear {
+                // 画面を離れたら再生を止める（操作は Proxy 経由）。
+                playerProxy.pause()
             }
     }
 
@@ -50,19 +54,19 @@ public struct VideoPlayerScreen: View {
         return date.formatted(.dateTime.year().month().day())
     }
 
-    /// 再生用 AVPlayerItem を取得し、AVPlayer を組み立てて再生を開始する。
-    private func loadPlayerItem() async {
-        // 既に準備済みなら再取得しない（再表示時の作り直し防止）。
+    /// Proxy へ読み込み・再生を委譲し、描画用の AVPlayer を受け取って表示状態を更新する。
+    private func start() async {
+        // 既に準備済みなら作り直さない（再表示時の二重ロード防止）。
         if case .ready = state { return }
 
-        guard let item = await repository.loadPlayerItem(asset.id) else {
+        // ラフに「とりあえず流す」体験のため、読み込みと同時に自動再生する。
+        let didLoad = await playerProxy.loadAndPlay(asset.id)
+        guard didLoad, let player = playerProxy.player() else {
             state = .failed
             return
         }
-        let player = AVPlayer(playerItem: item)
+        // player は描画（AVPlayerLayer へのバインド）にのみ使う。操作は Proxy 経由。
         state = .ready(player)
-        // ラフに「とりあえず流す」体験のため、表示と同時に自動再生する。
-        player.play()
     }
 }
 
@@ -86,7 +90,7 @@ struct VideoPlayerView: View {
                 .tint(.white)
 
         case .ready(let player):
-            VideoPlayer(player: player)
+            CustomVideoPlayer(player: player)
 
         case .failed:
             ContentUnavailableView(

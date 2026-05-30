@@ -5,7 +5,6 @@
 //  写真ライブラリ（PhotoKit）へのアクセスを抽象化する Repository 型定義。
 //
 
-import AVFoundation
 import CoreGraphics
 import Foundation
 
@@ -29,24 +28,15 @@ public struct VideoLibraryRepository: Sendable {
     /// パフォーマンス配慮のためセル表示時に遅延呼び出しする想定。取得できない場合は nil。
     public var loadThumbnail: @Sendable (_ id: VideoAsset.ID, _ size: CGSize) async -> CGImage?
 
-    /// 指定アセットの再生用 `AVPlayerItem` を非同期に取得する（F-2）。
-    ///
-    /// iCloud 上の動画も対象とし、必要に応じてネットワーク経由でストリーミングする。
-    /// サムネイル同様、再生リソースは Store を介さず再生画面の View が直接取得する。
-    /// 取得できない場合は nil。
-    public var loadPlayerItem: @Sendable (_ id: VideoAsset.ID) async -> sending AVPlayerItem?
-
     public init(
         authorizationStatus: @escaping @Sendable () async -> VideoLibraryAuthorizationStatus = { .authorized },
         requestAuthorization: @escaping @Sendable () async -> VideoLibraryAuthorizationStatus = { .authorized },
         fetchVideos: @escaping @Sendable () async -> [VideoAsset] = { [] },
-        loadThumbnail: @escaping @Sendable (_ id: VideoAsset.ID, _ size: CGSize) async -> CGImage? = { _, _ in nil },
-        loadPlayerItem: @escaping @Sendable (_ id: VideoAsset.ID) async -> sending AVPlayerItem? = { _ in nil }
+        loadThumbnail: @escaping @Sendable (_ id: VideoAsset.ID, _ size: CGSize) async -> CGImage? = { _, _ in nil }
     ) {
         self.authorizationStatus = authorizationStatus
         self.requestAuthorization = requestAuthorization
         self.fetchVideos = fetchVideos
         self.loadThumbnail = loadThumbnail
-        self.loadPlayerItem = loadPlayerItem
     }
 }
