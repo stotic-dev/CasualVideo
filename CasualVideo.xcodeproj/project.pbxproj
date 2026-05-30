@@ -6,27 +6,9 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXContainerItemProxy section */
-		044049912FCA7D2F00C143D1 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 0440497B2FCA7D2D00C143D1 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 044049822FCA7D2D00C143D1;
-			remoteInfo = CasualVideo;
-		};
-		0440499B2FCA7D2F00C143D1 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 0440497B2FCA7D2D00C143D1 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 044049822FCA7D2D00C143D1;
-			remoteInfo = CasualVideo;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
 		044049832FCA7D2D00C143D1 /* CasualVideo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CasualVideo.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		044049902FCA7D2F00C143D1 /* CasualVideoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CasualVideoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		0440499A2FCA7D2F00C143D1 /* CasualVideoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CasualVideoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		044049C62FCA7F8900C143D1 /* LocalPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = LocalPackage; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -35,34 +17,10 @@
 			path = CasualVideo;
 			sourceTree = "<group>";
 		};
-		044049932FCA7D2F00C143D1 /* CasualVideoTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = CasualVideoTests;
-			sourceTree = "<group>";
-		};
-		0440499D2FCA7D2F00C143D1 /* CasualVideoUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = CasualVideoUITests;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		044049802FCA7D2D00C143D1 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		0440498D2FCA7D2F00C143D1 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		044049972FCA7D2F00C143D1 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -76,8 +34,7 @@
 			isa = PBXGroup;
 			children = (
 				044049852FCA7D2D00C143D1 /* CasualVideo */,
-				044049932FCA7D2F00C143D1 /* CasualVideoTests */,
-				0440499D2FCA7D2F00C143D1 /* CasualVideoUITests */,
+				044049C62FCA7F8900C143D1 /* LocalPackage */,
 				044049842FCA7D2D00C143D1 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -86,8 +43,6 @@
 			isa = PBXGroup;
 			children = (
 				044049832FCA7D2D00C143D1 /* CasualVideo.app */,
-				044049902FCA7D2F00C143D1 /* CasualVideoTests.xctest */,
-				0440499A2FCA7D2F00C143D1 /* CasualVideoUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -117,52 +72,6 @@
 			productReference = 044049832FCA7D2D00C143D1 /* CasualVideo.app */;
 			productType = "com.apple.product-type.application";
 		};
-		0440498F2FCA7D2F00C143D1 /* CasualVideoTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 044049A72FCA7D2F00C143D1 /* Build configuration list for PBXNativeTarget "CasualVideoTests" */;
-			buildPhases = (
-				0440498C2FCA7D2F00C143D1 /* Sources */,
-				0440498D2FCA7D2F00C143D1 /* Frameworks */,
-				0440498E2FCA7D2F00C143D1 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				044049922FCA7D2F00C143D1 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				044049932FCA7D2F00C143D1 /* CasualVideoTests */,
-			);
-			name = CasualVideoTests;
-			packageProductDependencies = (
-			);
-			productName = CasualVideoTests;
-			productReference = 044049902FCA7D2F00C143D1 /* CasualVideoTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		044049992FCA7D2F00C143D1 /* CasualVideoUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 044049AA2FCA7D2F00C143D1 /* Build configuration list for PBXNativeTarget "CasualVideoUITests" */;
-			buildPhases = (
-				044049962FCA7D2F00C143D1 /* Sources */,
-				044049972FCA7D2F00C143D1 /* Frameworks */,
-				044049982FCA7D2F00C143D1 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				0440499C2FCA7D2F00C143D1 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				0440499D2FCA7D2F00C143D1 /* CasualVideoUITests */,
-			);
-			name = CasualVideoUITests;
-			packageProductDependencies = (
-			);
-			productName = CasualVideoUITests;
-			productReference = 0440499A2FCA7D2F00C143D1 /* CasualVideoUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -176,14 +85,6 @@
 					044049822FCA7D2D00C143D1 = {
 						CreatedOnToolsVersion = 26.4;
 					};
-					0440498F2FCA7D2F00C143D1 = {
-						CreatedOnToolsVersion = 26.4;
-						TestTargetID = 044049822FCA7D2D00C143D1;
-					};
-					044049992FCA7D2F00C143D1 = {
-						CreatedOnToolsVersion = 26.4;
-						TestTargetID = 044049822FCA7D2D00C143D1;
-					};
 				};
 			};
 			buildConfigurationList = 0440497E2FCA7D2D00C143D1 /* Build configuration list for PBXProject "CasualVideo" */;
@@ -195,34 +96,21 @@
 			);
 			mainGroup = 0440497A2FCA7D2D00C143D1;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				044049C82FCA7FB500C143D1 /* XCLocalSwiftPackageReference "LocalPackage" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 044049842FCA7D2D00C143D1 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				044049822FCA7D2D00C143D1 /* CasualVideo */,
-				0440498F2FCA7D2F00C143D1 /* CasualVideoTests */,
-				044049992FCA7D2F00C143D1 /* CasualVideoUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		044049812FCA7D2D00C143D1 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		0440498E2FCA7D2F00C143D1 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		044049982FCA7D2F00C143D1 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -239,34 +127,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		0440498C2FCA7D2F00C143D1 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		044049962FCA7D2F00C143D1 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		044049922FCA7D2F00C143D1 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 044049822FCA7D2D00C143D1 /* CasualVideo */;
-			targetProxy = 044049912FCA7D2F00C143D1 /* PBXContainerItemProxy */;
-		};
-		0440499C2FCA7D2F00C143D1 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 044049822FCA7D2D00C143D1 /* CasualVideo */;
-			targetProxy = 0440499B2FCA7D2F00C143D1 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		044049A22FCA7D2F00C143D1 /* Debug */ = {
@@ -408,7 +269,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
@@ -418,13 +279,14 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = NO;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.4;
 			};
 			name = Debug;
@@ -452,7 +314,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
@@ -462,115 +324,14 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = NO;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
-				XROS_DEPLOYMENT_TARGET = 26.4;
-			};
-			name = Release;
-		};
-		044049A82FCA7D2F00C143D1 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 56LYVN6DMF;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
-				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "stotic-dev.CasualVideoTests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CasualVideo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CasualVideo";
-				XROS_DEPLOYMENT_TARGET = 26.4;
-			};
-			name = Debug;
-		};
-		044049A92FCA7D2F00C143D1 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 56LYVN6DMF;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
-				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "stotic-dev.CasualVideoTests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CasualVideo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CasualVideo";
-				XROS_DEPLOYMENT_TARGET = 26.4;
-			};
-			name = Release;
-		};
-		044049AB2FCA7D2F00C143D1 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 56LYVN6DMF;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
-				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "stotic-dev.CasualVideoUITests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
-				TEST_TARGET_NAME = CasualVideo;
-				XROS_DEPLOYMENT_TARGET = 26.4;
-			};
-			name = Debug;
-		};
-		044049AC2FCA7D2F00C143D1 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 56LYVN6DMF;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
-				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "stotic-dev.CasualVideoUITests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
-				TEST_TARGET_NAME = CasualVideo;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.4;
 			};
 			name = Release;
@@ -596,25 +357,14 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		044049A72FCA7D2F00C143D1 /* Build configuration list for PBXNativeTarget "CasualVideoTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				044049A82FCA7D2F00C143D1 /* Debug */,
-				044049A92FCA7D2F00C143D1 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		044049AA2FCA7D2F00C143D1 /* Build configuration list for PBXNativeTarget "CasualVideoUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				044049AB2FCA7D2F00C143D1 /* Debug */,
-				044049AC2FCA7D2F00C143D1 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		044049C82FCA7FB500C143D1 /* XCLocalSwiftPackageReference "LocalPackage" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LocalPackage;
+		};
+/* End XCLocalSwiftPackageReference section */
 	};
 	rootObject = 0440497B2FCA7D2D00C143D1 /* Project object */;
 }
