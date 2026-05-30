@@ -48,6 +48,10 @@ struct VideoLibraryView: View {
         NavigationStack {
             content
                 .navigationTitle("動画")
+                .navigationDestination(for: VideoAsset.self) { asset in
+                    // 一覧セルからの遷移先（F-2 再生画面）。
+                    VideoPlayerScreen(asset: asset)
+                }
         }
     }
 

@@ -18,8 +18,13 @@ struct VideoGridView: View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 2) {
                 ForEach(videos) { video in
-                    VideoCellView(video: video)
-                        .aspectRatio(1, contentMode: .fill)
+                    // セルタップで再生画面（F-2）へ遷移する。遷移先は VideoLibraryView の
+                    // navigationDestination(for: VideoAsset.self) で解決する。
+                    NavigationLink(value: video) {
+                        VideoCellView(video: video)
+                            .aspectRatio(1, contentMode: .fill)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(2)
