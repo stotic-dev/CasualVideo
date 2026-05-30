@@ -61,6 +61,19 @@ App ──┬──> Main ──> Core
 
 ビルド・テストは `LocalPackage` 単体（SPM）と、アプリ全体（xcodebuild）の2系統がある。ロジック開発は基本 SPM 側で完結させると速い。
 
+### コード検証（Makefile / 推奨）
+
+**コード実装後は必ず以下で検証すること。** リポジトリルートの `Makefile` に検証コマンドを集約している。
+
+```bash
+make build   # LocalPackage を iOS シミュレーター向けにビルド
+make test    # LocalPackage のテストを実行（カバレッジ計測あり）
+make verify  # build → test をまとめて実行（実装後の検証はこれを使う）
+make help    # 利用可能なターゲット一覧を表示
+```
+
+`make build` / `make test` は iOS シミュレーター SDK（`arm64-apple-ios26.2-simulator`）を指定して実行するため、実機向けの整合性を保ったまま検証できる。
+
 ### Swift Package（推奨: ロジック開発時）
 
 ```bash

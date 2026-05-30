@@ -56,6 +56,6 @@ import Testing
 
 - テスト対象が方針の範囲内か（ApplicationTarget や View 表示をテストしていないか）を確認する。
 - Swift Testing で書き、stub を struct のクロージャ差し替えで作ったか確認する。
-- `cd LocalPackage && swift test`（または対象の `--filter`）が通ることを確認する。
+- **コード検証**: リポジトリルートで `make test` を実行し、テストが通ることを確認する（検証コマンドの正本は `Makefile` / `code-verification` スキル）。`make` コマンドは実行許可済みなので確認を求めず実行してよい。失敗したら原因を解消し、通る状態にしてから完了とする。
 - 追加・修正したテストと、何を検証しているかを簡潔に報告する。
 - **プロダクトコード（機能）の実装はこのスキルの責務外。** 必要なら `implement-feature` に委ねる旨を報告する。
