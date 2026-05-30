@@ -15,13 +15,18 @@ extension VideoPlayerProxy {
     /// 操作はすべて Client へ委譲する。`VideoPlayerClient` は `@MainActor` final class（= Sendable）のため、
     /// Proxy のクロージャから安全に参照できる。
     @MainActor
-    static func live(client: VideoPlayerClient) -> VideoPlayerProxy {
+    static func live(
+        client: VideoPlayerClient,
+        audioSession: AudioSessionClient = AudioSessionClient()
+    ) -> VideoPlayerProxy {
         VideoPlayerProxy(
             player: { client.player },
             loadAndPlay: { id in await client.loadAndPlay(localIdentifier: id) },
             play: { client.play() },
             pause: { client.pause() },
-            setMuted: { client.setMuted($0) }
+            setMuted: { client.setMuted($0) },
+            // バックグラウンド再生・PIP（F-3）のためのオーディオセッション設定を Infra へ委譲。
+            prepareForBackgroundPlayback: { audioSession.activatePlayback() }
         )
     }
 }

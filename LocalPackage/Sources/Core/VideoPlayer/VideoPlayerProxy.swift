@@ -37,17 +37,25 @@ public struct VideoPlayerProxy: Sendable {
     /// 音声ミュートを切り替える（F-7 で使用予定）。
     public var setMuted: @MainActor @Sendable (_ muted: Bool) -> Void
 
+    /// バックグラウンド再生・PIP（F-3）のためにオーディオセッションを構成・アクティブ化する。
+    ///
+    /// PIP・バックグラウンド継続には `.playback` カテゴリでのオーディオセッションが必要なため、
+    /// 再生開始の前に呼ぶ。プロセス外（システムのオーディオセッション）への設定は `Infra` に閉じる。
+    public var prepareForBackgroundPlayback: @MainActor @Sendable () -> Void
+
     public init(
         player: @escaping @MainActor @Sendable () -> AVPlayer? = { nil },
         loadAndPlay: @escaping @Sendable (_ id: VideoAsset.ID) async -> Bool = { _ in false },
         play: @escaping @MainActor @Sendable () -> Void = {},
         pause: @escaping @MainActor @Sendable () -> Void = {},
-        setMuted: @escaping @MainActor @Sendable (_ muted: Bool) -> Void = { _ in }
+        setMuted: @escaping @MainActor @Sendable (_ muted: Bool) -> Void = { _ in },
+        prepareForBackgroundPlayback: @escaping @MainActor @Sendable () -> Void = {}
     ) {
         self.player = player
         self.loadAndPlay = loadAndPlay
         self.play = play
         self.pause = pause
         self.setMuted = setMuted
+        self.prepareForBackgroundPlayback = prepareForBackgroundPlayback
     }
 }
