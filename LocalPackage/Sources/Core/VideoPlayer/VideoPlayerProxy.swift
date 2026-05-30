@@ -43,13 +43,20 @@ public struct VideoPlayerProxy: Sendable {
     /// 再生開始の前に呼ぶ。プロセス外（システムのオーディオセッション）への設定は `Infra` に閉じる。
     public var prepareForBackgroundPlayback: @MainActor @Sendable () -> Void
 
+    /// 現在再生中アイテムの再生完了を購読する。完了のたびに渡したハンドラが呼ばれる。
+    ///
+    /// プレイリストの連続再生（F-4: 1 動画の再生終了で次へ自動遷移）の起点。
+    /// 操作（購読登録）はメインアクター上で行う。
+    public var observeDidPlayToEnd: @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void
+
     public init(
         player: @escaping @MainActor @Sendable () -> AVPlayer? = { nil },
         loadAndPlay: @escaping @Sendable (_ id: VideoAsset.ID) async -> Bool = { _ in false },
         play: @escaping @MainActor @Sendable () -> Void = {},
         pause: @escaping @MainActor @Sendable () -> Void = {},
         setMuted: @escaping @MainActor @Sendable (_ muted: Bool) -> Void = { _ in },
-        prepareForBackgroundPlayback: @escaping @MainActor @Sendable () -> Void = {}
+        prepareForBackgroundPlayback: @escaping @MainActor @Sendable () -> Void = {},
+        observeDidPlayToEnd: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in }
     ) {
         self.player = player
         self.loadAndPlay = loadAndPlay
@@ -57,5 +64,6 @@ public struct VideoPlayerProxy: Sendable {
         self.pause = pause
         self.setMuted = setMuted
         self.prepareForBackgroundPlayback = prepareForBackgroundPlayback
+        self.observeDidPlayToEnd = observeDidPlayToEnd
     }
 }

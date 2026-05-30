@@ -25,6 +25,12 @@ public final class VideoPlayerClient {
     /// アイテム読み込みのための PhotoKit クライアント。
     private let photoLibrary = PhotoLibraryClient()
 
+    /// 現在再生中アイテムの再生完了通知の購読トークン。
+    private var didPlayToEndObserver: NSObjectProtocol?
+
+    /// 再生完了時に呼び出すハンドラ（プレイリストの自動遷移に使う / F-4）。
+    private var didPlayToEndHandler: (() -> Void)?
+
     public nonisolated init() {}
 
     /// 指定アセットの動画を読み込んで差し替え、再生を開始する。読み込み成否を返す。
@@ -34,7 +40,7 @@ public final class VideoPlayerClient {
         guard let item = await photoLibrary.loadPlayerItem(localIdentifier: localIdentifier) else {
             return false
         }
-        player.replaceCurrentItem(with: item)
+        replaceCurrentItem(with: item)
         player.play()
         return true
     }
@@ -52,5 +58,35 @@ public final class VideoPlayerClient {
     /// 音声ミュートを切り替える。
     public func setMuted(_ muted: Bool) {
         player.isMuted = muted
+    }
+
+    /// 現在再生中アイテムの再生完了を購読する。再生完了のたびに `handler` が呼ばれる。
+    ///
+    /// プレイリストの「1 動画の再生終了で次へ自動遷移」（F-4）の起点となる。
+    public func observeDidPlayToEnd(_ handler: @escaping () -> Void) {
+        didPlayToEndHandler = handler
+    }
+
+    // MARK: - Private
+
+    /// 再生アイテムを差し替え、そのアイテムの再生完了通知を購読し直す。
+    private func replaceCurrentItem(with item: AVPlayerItem) {
+        removeDidPlayToEndObserver()
+        player.replaceCurrentItem(with: item)
+        didPlayToEndObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.didPlayToEndHandler?()
+            }
+        }
+    }
+
+    private func removeDidPlayToEndObserver() {
+        guard let didPlayToEndObserver else { return }
+        NotificationCenter.default.removeObserver(didPlayToEndObserver)
+        self.didPlayToEndObserver = nil
     }
 }

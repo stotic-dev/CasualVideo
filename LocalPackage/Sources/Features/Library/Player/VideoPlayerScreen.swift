@@ -2,42 +2,61 @@
 //  VideoPlayerScreen.swift
 //  Library
 //
-//  一覧から選んだ動画を再生する再生画面（F-2）。
+//  一覧から選んだ動画を起点に、一覧全体をプレイリストとして連続再生する再生画面（F-2 / F-4）。
 //
 //  Screen と presentational View の分離方針は docs/swiftui.md を参照。
-//  - Screen（VideoPlayerScreen）: 再生エンジンの操作（VideoPlayerProxy 経由）と、その副作用を担う。
-//    AVPlayer / AVPlayerItem を View 内で直接生成・操作せず、すべて Proxy へ委譲する
-//    （操作の責務は Infra の VideoPlayerClient に閉じ、UI 表示と分離する）。
-//  - View（VideoPlayerView）: 受け取った再生状態（VideoPlayerViewState）を表示するだけ。副作用を持たない。
+//  - Screen（VideoPlayerScreen）: 再生エンジンの操作（VideoPlayerProxy / PlaylistStore 経由）と副作用を担う。
+//    AVPlayer / AVPlayerItem を View 内で直接生成・操作せず、すべて Proxy / Store へ委譲する。
+//  - View（VideoPlayerView）: 受け取った再生状態（VideoPlayerViewState）と操作クロージャを表示するだけ。副作用を持たない。
+//
+//  連続再生（F-4）の進行管理（現在位置・次/前送り・再生終了での自動遷移）は Core の PlaylistStore が担う。
 //
 
 import AVFoundation
 import Core
 import SwiftUI
 
-/// 動画の全画面再生画面。一覧セルからの遷移先として用いる。
+/// プレイリストの全画面連続再生画面。一覧セルからの遷移先として用いる。
 public struct VideoPlayerScreen: View {
 
-    let asset: VideoAsset
+    /// 連続再生の対象プレイリスト。
+    let playlist: [VideoAsset]
+
+    /// 再生を開始するインデックス。
+    let startIndex: Int
 
     @Environment(\.videoPlayerProxy) private var playerProxy
+
+    /// 再生リソースの表示状態（AVPlayer は View ライフサイクルに紐づくため View 層で保持）。
     @State private var state: VideoPlayerViewState = .loading
 
-    public init(asset: VideoAsset) {
-        self.asset = asset
+    /// 連続再生の進行を管理する Store。再生画面のライフサイクルに紐づくため View 層で生成・保持する。
+    @State private var playlistStore: PlaylistStore?
+
+    public init(playlist: [VideoAsset], startIndex: Int = 0) {
+        self.playlist = playlist
+        self.startIndex = startIndex
     }
 
     public var body: some View {
         playerView
             .navigationTitle(navigationTitle)
             .task {
-                // ライフサイクルに紐づく副作用（読み込み・再生開始）は Screen 側に置く。
+                // ライフサイクルに紐づく副作用（読み込み・連続再生開始）は Screen 側に置く。
                 await start()
             }
     }
 
     private var playerView: some View {
-        let view = VideoPlayerView(state: state)
+        let view = VideoPlayerView(
+            state: state,
+            position: playlistStore?.currentPosition,
+            totalCount: playlistStore?.totalCount ?? 0,
+            canPlayNext: playlistStore?.canPlayNext ?? false,
+            canPlayPrevious: playlistStore?.canPlayPrevious ?? false,
+            onPlayNext: { await playlistStore?.playNext() },
+            onPlayPrevious: { await playlistStore?.playPrevious() }
+        )
         #if os(iOS)
         return view.navigationBarTitleDisplayMode(.inline)
         #else
@@ -46,33 +65,46 @@ public struct VideoPlayerScreen: View {
     }
 
     private var navigationTitle: String {
-        guard let date = asset.creationDate else { return "再生" }
+        guard let date = playlistStore?.currentAsset?.creationDate else { return "再生" }
         return date.formatted(.dateTime.year().month().day())
     }
 
-    /// Proxy へ読み込み・再生を委譲し、描画用の AVPlayer を受け取って表示状態を更新する。
+    /// Store へ連続再生を委譲し、描画用の AVPlayer を受け取って表示状態を更新する。
     private func start() async {
         // 既に準備済みなら作り直さない（再表示時の二重ロード防止）。
         if case .ready = state { return }
+        guard !playlist.isEmpty else {
+            state = .failed
+            return
+        }
 
         // PIP・バックグラウンド再生（F-3）のためのオーディオセッションを再生前に構成する。
         playerProxy.prepareForBackgroundPlayback()
 
-        // ラフに「とりあえず流す」体験のため、読み込みと同時に自動再生する。
-        let didLoad = await playerProxy.loadAndPlay(asset.id)
-        guard didLoad, let player = playerProxy.player() else {
+        let store = PlaylistStore(playerProxy: playerProxy)
+        playlistStore = store
+        await store.start(playlist: playlist, from: startIndex)
+
+        guard let player = playerProxy.player() else {
             state = .failed
             return
         }
-        // player は描画（AVPlayerLayer へのバインド）にのみ使う。操作は Proxy 経由。
+        // player は描画（AVPlayerLayer へのバインド）にのみ使う。操作は Proxy / Store 経由。
         state = .ready(player)
     }
 }
 
-/// 再生画面の presentational View。init で受け取った再生状態を表示するだけで副作用を持たない。
+/// 再生画面の presentational View。init で受け取った状態・操作クロージャを表示するだけで副作用を持たない。
 struct VideoPlayerView: View {
 
     let state: VideoPlayerViewState
+    /// 現在の再生位置（1 始まり）。プレイリストが 1 件以下なら nil で非表示。
+    let position: Int?
+    let totalCount: Int
+    let canPlayNext: Bool
+    let canPlayPrevious: Bool
+    let onPlayNext: () async -> Void
+    let onPlayPrevious: () async -> Void
 
     var body: some View {
         content
@@ -90,6 +122,19 @@ struct VideoPlayerView: View {
 
         case .ready(let player):
             CustomVideoPlayer(player: player)
+                .overlay(alignment: .top) {
+                    if totalCount > 1, let position {
+                        Text("\(position) / \(totalCount)")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(8)
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    if totalCount > 1 {
+                        playbackControls
+                    }
+                }
 
         case .failed:
             ContentUnavailableView(
@@ -98,5 +143,26 @@ struct VideoPlayerView: View {
                 description: Text("この動画を読み込めませんでした。")
             )
         }
+    }
+
+    private var playbackControls: some View {
+        HStack(spacing: 40) {
+            Button {
+                Task { await onPlayPrevious() }
+            } label: {
+                Image(systemName: "backward.fill")
+            }
+            .disabled(!canPlayPrevious)
+
+            Button {
+                Task { await onPlayNext() }
+            } label: {
+                Image(systemName: "forward.fill")
+            }
+            .disabled(!canPlayNext)
+        }
+        .font(.title)
+        .foregroundStyle(.white)
+        .padding()
     }
 }
