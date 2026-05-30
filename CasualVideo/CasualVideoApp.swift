@@ -6,12 +6,13 @@
 //
 
 import SwiftUI
+import App
 
 @main
 struct CasualVideoApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootScreen.make()
         }
     }
 }

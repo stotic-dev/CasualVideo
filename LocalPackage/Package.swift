@@ -3,8 +3,33 @@
 
 import PackageDescription
 
+// MARK: - Targets
+
+let core = AppTarget(
+    name: "Core",
+    testTargetName: "CoreTests"
+)
+let infra = AppTarget(
+    name: "Infra",
+    dependencies: []
+)
+let mainFeature = AppTarget(
+    name: "Main",
+    testTargetName: "MainTests",
+    dependencies: [core]
+)
+
+let app = AppTarget(
+    name: "App",
+    dependencies: [mainFeature, core, infra]
+)
+
+
+// MARK: - Package Definition
+
 let package = Package(
     name: "LocalPackage",
+    platforms: [.iOS(.v26), .macOS(.v26)],
     products: [
         .library(
             name: "App",
@@ -13,26 +38,47 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "App"
+            name: app.name,
+            dependencies: app.targetDependencies
         ),
         .target(
-            name: "Main",
+            name: mainFeature.name,
+            dependencies: mainFeature.targetDependencies,
             path: "Sources/Features/Main"
         ),
         .target(
-            name: "Core"
+            name: core.name
         ),
         .target(
-            name: "Infra"
+            name: infra.name
         ),
         .testTarget(
-            name: "MainTests",
-            dependencies: ["Main"]
+            name: mainFeature.testTargetName!,
+            dependencies: mainFeature.testDependencies
         ),
         .testTarget(
-            name: "CoreTests",
-            dependencies: ["Core"]
+            name: core.testTargetName!,
+            dependencies: core.testDependencies
         ),
     ],
     swiftLanguageModes: [.v6]
 )
+
+struct AppTarget {
+    let name: String
+    let testTargetName: String?
+    let dependencies: [AppTarget]
+    
+    var targetDependencies: [Target.Dependency] {
+        dependencies.map { Target.Dependency(stringLiteral: $0.name) }
+    }
+    var testDependencies: [Target.Dependency] {
+        [.init(stringLiteral: name)]
+    }
+    
+    init(name: String, testTargetName: String? = nil, dependencies: [AppTarget] = []) {
+        self.name = name
+        self.testTargetName = testTargetName
+        self.dependencies = dependencies
+    }
+}
