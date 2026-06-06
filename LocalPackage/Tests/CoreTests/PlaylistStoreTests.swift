@@ -197,6 +197,192 @@ struct PlaylistStoreTests {
         #expect(paused.value)
     }
 
+    // MARK: - シャッフル（F-5）
+
+    @Test("シャッフルに切り替えても現在再生中の動画は維持される")
+    func setPlaybackOrder_shuffle_keepsCurrentAsset() async {
+        let played = Box<[String]>([])
+        let store = PlaylistStore(playerProxy: recordingProxy(played: played))
+
+        await store.start(playlist: assets, from: 1)
+        #expect(store.currentAsset?.id == "b")
+
+        store.setPlaybackOrder(.shuffle)
+
+        // 現在の動画は維持され、再生位置は先頭（1 始まりの 1）に据えられる。
+        #expect(store.playbackOrder == .shuffle)
+        #expect(store.currentAsset?.id == "b")
+        #expect(store.currentPosition == 1)
+        #expect(store.totalCount == 3)
+        // 順序を組み替えただけなので追加再生は発生しない。
+        #expect(played.value == ["b"])
+    }
+
+    @Test("start 時のシャッフルでも開始インデックスの動画が先頭に来る")
+    func start_shuffle_putsStartAssetFirst() async {
+        // 何度試行しても開始動画が必ず先頭に維持されることを確認する。
+        for _ in 0 ..< 20 {
+            let played = Box<[String]>([])
+            let store = PlaylistStore(
+                playerProxy: recordingProxy(played: played),
+                playbackOrder: .shuffle
+            )
+
+            await store.start(playlist: assets, from: 2)
+
+            #expect(store.currentAsset?.id == "c")
+            #expect(store.currentPosition == 1)
+            #expect(played.value == ["c"])
+        }
+    }
+
+    @Test("シャッフル後も全要素を一巡すると全動画を再生する")
+    func shuffle_coversAllAssetsOnce() async {
+        let played = Box<[String]>([])
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            playbackOrder: .shuffle
+        )
+
+        await store.start(playlist: assets, from: 0)
+        await store.playNext()
+        await store.playNext()
+
+        // 開始動画("a")が先頭で、残り 2 本も重複なく再生される。
+        #expect(played.value.first == "a")
+        #expect(Set(played.value) == Set(["a", "b", "c"]))
+        #expect(played.value.count == 3)
+    }
+
+    @Test("toggleShuffle は連続 ↔ シャッフルを切り替え、現在位置を維持する")
+    func toggleShuffle_switchesOrderKeepingPosition() async {
+        let store = PlaylistStore(playerProxy: recordingProxy(played: Box([])))
+
+        await store.start(playlist: assets, from: 1)
+        #expect(store.playbackOrder == .sequential)
+
+        store.toggleShuffle()
+        #expect(store.playbackOrder == .shuffle)
+        #expect(store.currentAsset?.id == "b")
+
+        store.toggleShuffle()
+        #expect(store.playbackOrder == .sequential)
+        #expect(store.currentAsset?.id == "b")
+        // 連続へ戻すと元の並びの位置（2 番目）へ復帰する。
+        #expect(store.currentPosition == 2)
+    }
+
+    // MARK: - リピート（F-5）
+
+    @Test("リピート all では末尾の再生完了で先頭へ循環する")
+    func didPlayToEnd_repeatAll_wrapsToFirst() async {
+        let played = Box<[String]>([])
+        let handler = Box<(@MainActor @Sendable () -> Void)?>(nil)
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played, handler: handler),
+            repeatMode: .all
+        )
+
+        await store.start(playlist: assets, from: 2)
+        #expect(played.value == ["c"])
+
+        // 末尾の再生完了 → 先頭へ循環する。
+        handler.value?()
+        await waitUntil { played.value.count >= 2 }
+
+        #expect(store.currentIndex == 0)
+        #expect(played.value == ["c", "a"])
+    }
+
+    @Test("リピート one では再生完了で同一動画を再生し直す")
+    func didPlayToEnd_repeatOne_replaysSameAsset() async {
+        let played = Box<[String]>([])
+        let handler = Box<(@MainActor @Sendable () -> Void)?>(nil)
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played, handler: handler),
+            repeatMode: .one
+        )
+
+        await store.start(playlist: assets, from: 1)
+        #expect(played.value == ["b"])
+
+        handler.value?()
+        await waitUntil { played.value.count >= 2 }
+
+        // 同じ動画("b")を再生し直し、位置も変わらない。
+        #expect(store.currentIndex == 1)
+        #expect(played.value == ["b", "b"])
+    }
+
+    @Test("リピート off では末尾の再生完了で停止し循環しない")
+    func didPlayToEnd_repeatOff_pausesAtLast() async {
+        let played = Box<[String]>([])
+        let paused = Box(false)
+        let handler = Box<(@MainActor @Sendable () -> Void)?>(nil)
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played, paused: paused, handler: handler),
+            repeatMode: .off
+        )
+
+        await store.start(playlist: assets, from: 2)
+        #expect(played.value == ["c"])
+
+        handler.value?()
+        await waitUntil { paused.value }
+
+        #expect(store.currentIndex == 2)
+        #expect(played.value == ["c"])
+        #expect(paused.value)
+    }
+
+    @Test("リピート時は末尾でも canPlayNext、先頭でも canPlayPrevious が true")
+    func canPlayNextPrevious_repeat_allowsWrapping() async {
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: Box([])),
+            repeatMode: .all
+        )
+
+        // 末尾でも次へ進める（先頭へ循環するため）。
+        await store.start(playlist: assets, from: 2)
+        #expect(store.canPlayNext == true)
+        #expect(store.canPlayPrevious == true)
+
+        // 先頭でも前へ戻れる（末尾へ循環するため）。
+        await store.start(playlist: assets, from: 0)
+        #expect(store.canPlayNext == true)
+        #expect(store.canPlayPrevious == true)
+    }
+
+    @Test("リピート時の playNext は末尾から先頭へラップする")
+    func playNext_repeat_wrapsToFirst() async {
+        let played = Box<[String]>([])
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            repeatMode: .all
+        )
+
+        await store.start(playlist: assets, from: 2)
+        await store.playNext()
+
+        #expect(store.currentIndex == 0)
+        #expect(played.value == ["c", "a"])
+    }
+
+    @Test("リピート時の playPrevious は先頭から末尾へラップする")
+    func playPrevious_repeat_wrapsToLast() async {
+        let played = Box<[String]>([])
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            repeatMode: .all
+        )
+
+        await store.start(playlist: assets, from: 0)
+        await store.playPrevious()
+
+        #expect(store.currentIndex == 2)
+        #expect(played.value == ["a", "c"])
+    }
+
     // MARK: - Test utility
 
     /// 条件が満たされるまで MainActor を譲りながら待つ（自動遷移は Task で非同期に進むため）。

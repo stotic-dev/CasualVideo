@@ -2,14 +2,15 @@
 //  VideoPlayerScreen.swift
 //  Library
 //
-//  一覧から選んだ動画を起点に、一覧全体をプレイリストとして連続再生する再生画面（F-2 / F-4）。
+//  一覧から選んだ動画を起点に、一覧全体をプレイリストとして連続再生する再生画面（F-2 / F-4 / F-5）。
 //
 //  Screen と presentational View の分離方針は docs/swiftui.md を参照。
 //  - Screen（VideoPlayerScreen）: 再生エンジンの操作（VideoPlayerProxy / PlaylistStore 経由）と副作用を担う。
 //    AVPlayer / AVPlayerItem を View 内で直接生成・操作せず、すべて Proxy / Store へ委譲する。
 //  - View（VideoPlayerView）: 受け取った再生状態（VideoPlayerViewState）と操作クロージャを表示するだけ。副作用を持たない。
 //
-//  連続再生（F-4）の進行管理（現在位置・次/前送り・再生終了での自動遷移）は Core の PlaylistStore が担う。
+//  連続再生（F-4）の進行管理（現在位置・次/前送り・再生終了での自動遷移）と
+//  シャッフル / リピート（F-5）の状態管理は Core の PlaylistStore が担う。
 //
 
 import AVFoundation
@@ -43,7 +44,7 @@ public struct VideoPlayerScreen: View {
             .navigationTitle(navigationTitle)
             .task {
                 // ライフサイクルに紐づく副作用（読み込み・連続再生開始）は Screen 側に置く。
-                await start()
+                await onAppear()
             }
     }
 
@@ -54,8 +55,12 @@ public struct VideoPlayerScreen: View {
             totalCount: playlistStore?.totalCount ?? 0,
             canPlayNext: playlistStore?.canPlayNext ?? false,
             canPlayPrevious: playlistStore?.canPlayPrevious ?? false,
+            playbackOrder: playlistStore?.playbackOrder ?? .sequential,
+            repeatMode: playlistStore?.repeatMode ?? .off,
             onPlayNext: { await playlistStore?.playNext() },
-            onPlayPrevious: { await playlistStore?.playPrevious() }
+            onPlayPrevious: { await playlistStore?.playPrevious() },
+            onToggleShuffle: { playlistStore?.toggleShuffle() },
+            onCycleRepeat: { playlistStore?.cycleRepeatMode() }
         )
         #if os(iOS)
         return view.navigationBarTitleDisplayMode(.inline)
@@ -68,9 +73,11 @@ public struct VideoPlayerScreen: View {
         guard let date = playlistStore?.currentAsset?.creationDate else { return "再生" }
         return date.formatted(.dateTime.year().month().day())
     }
+}
 
+private extension VideoPlayerScreen {
     /// Store へ連続再生を委譲し、描画用の AVPlayer を受け取って表示状態を更新する。
-    private func start() async {
+    func onAppear() async {
         // 既に準備済みなら作り直さない（再表示時の二重ロード防止）。
         if case .ready = state { return }
         guard !playlist.isEmpty else {
@@ -103,8 +110,12 @@ struct VideoPlayerView: View {
     let totalCount: Int
     let canPlayNext: Bool
     let canPlayPrevious: Bool
+    let playbackOrder: PlaybackOrder
+    let repeatMode: RepeatMode
     let onPlayNext: () async -> Void
     let onPlayPrevious: () async -> Void
+    let onToggleShuffle: () -> Void
+    let onCycleRepeat: () -> Void
 
     var body: some View {
         content
@@ -146,13 +157,22 @@ struct VideoPlayerView: View {
     }
 
     private var playbackControls: some View {
-        HStack(spacing: 40) {
+        HStack(spacing: 32) {
+            // シャッフル切り替え（F-5）。有効時はアクセントカラーで状態を示す。
+            Button {
+                onToggleShuffle()
+            } label: {
+                Image(systemName: "shuffle")
+            }
+            .foregroundStyle(playbackOrder == .shuffle ? Color.accentColor : .white)
+
             Button {
                 Task { await onPlayPrevious() }
             } label: {
                 Image(systemName: "backward.fill")
             }
             .disabled(!canPlayPrevious)
+            .foregroundStyle(.white)
 
             Button {
                 Task { await onPlayNext() }
@@ -160,9 +180,25 @@ struct VideoPlayerView: View {
                 Image(systemName: "forward.fill")
             }
             .disabled(!canPlayNext)
+            .foregroundStyle(.white)
+
+            // リピート切り替え（F-5: off → all → one → off）。off 以外でアクセントカラー、one は 1 を示すシンボル。
+            Button {
+                onCycleRepeat()
+            } label: {
+                Image(systemName: repeatSymbolName)
+            }
+            .foregroundStyle(repeatMode == .off ? Color.white : Color.accentColor)
         }
         .font(.title)
-        .foregroundStyle(.white)
         .padding()
+    }
+
+    /// リピートモードに対応する SF Symbol 名。
+    private var repeatSymbolName: String {
+        switch repeatMode {
+        case .off, .all: "repeat"
+        case .one: "repeat.1"
+        }
     }
 }
