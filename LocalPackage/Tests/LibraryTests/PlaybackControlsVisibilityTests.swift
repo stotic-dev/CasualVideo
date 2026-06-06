@@ -7,6 +7,10 @@
 //  自動非表示タイマーは init に注入できる sleep クロージャで待機する。テストではこの sleep を
 //  差し替え、待機の完了タイミングを明示的に制御することで自動非表示を決定的に検証する。
 //
+//  プレゼンテーションロジックのテストは複雑になりがちなため、各ケースは AAA パターン
+//  （Arrange / Act / Assert）をコメントで明示する。状態検証は公開状態をまとめて検証する
+//  共通 Assertion（`assertState`）で行い、副作用に関連する Mock の検証はケースごとに別途行う。
+//
 
 import Testing
 
@@ -19,67 +23,79 @@ struct PlaybackControlsVisibilityTests {
 
     @Test("初期状態では isVisible は false")
     func initialStateIsHidden() {
+        // Arrange
         let visibility = PlaybackControlsVisibility(sleep: { _ in })
 
-        #expect(visibility.isVisible == false)
+        // Act
+        // （操作なし。生成直後の初期状態を検証する。）
+
+        // Assert
+        assertState(visibility, ExpectedState(isVisible: false))
     }
 
     @Test("show() で isVisible が true になる")
     func show_makesVisible() {
-        // sleep が即座に完了すると自動非表示まで走ってしまうため、決して完了しない sleep を注入する。
+        // Arrange: sleep が即座に完了すると自動非表示まで走ってしまうため、決して完了しない sleep を注入する。
         let visibility = PlaybackControlsVisibility(sleep: { _ in try await neverCompletingSleep() })
 
+        // Act
         visibility.show()
 
-        #expect(visibility.isVisible == true)
+        // Assert
+        assertState(visibility, ExpectedState(isVisible: true))
     }
 
     @Test("toggle() で表示・非表示が切り替わる")
     func toggle_switchesVisibility() {
+        // Arrange
         let visibility = PlaybackControlsVisibility(sleep: { _ in try await neverCompletingSleep() })
 
+        // Act & Assert: 呼ぶたびに表示状態が反転する
         visibility.toggle()
-        #expect(visibility.isVisible == true)
+        assertState(visibility, ExpectedState(isVisible: true))
 
         visibility.toggle()
-        #expect(visibility.isVisible == false)
+        assertState(visibility, ExpectedState(isVisible: false))
 
         visibility.toggle()
-        #expect(visibility.isVisible == true)
+        assertState(visibility, ExpectedState(isVisible: true))
     }
 
     @Test("hide() で非表示になる")
     func hide_makesHidden() {
+        // Arrange
         let visibility = PlaybackControlsVisibility(sleep: { _ in try await neverCompletingSleep() })
         visibility.show()
-        #expect(visibility.isVisible == true)
+        assertState(visibility, ExpectedState(isVisible: true))
 
+        // Act
         visibility.hide()
 
-        #expect(visibility.isVisible == false)
+        // Assert
+        assertState(visibility, ExpectedState(isVisible: false))
     }
 
     // MARK: - 自動非表示
 
     @Test("表示後 autoHideDelay 経過で自動的に isVisible が false になる")
     func autoHide_afterDelay() async {
-        // sleep の完了を任意のタイミングで解放できるゲートを用意し、解放後に自動非表示が走ることを検証する。
+        // Arrange: sleep の完了を任意のタイミングで解放できるゲートを用意する。
         let gate = SleepGate()
         let visibility = PlaybackControlsVisibility(sleep: { _ in try await gate.wait() })
-
         visibility.show()
-        #expect(visibility.isVisible == true)
+        assertState(visibility, ExpectedState(isVisible: true))
 
-        // 待機を解放し、自動非表示タスクが isVisible を false にするのを待つ。
+        // Act: 待機を解放し、自動非表示タスクが isVisible を false にするのを待つ。
         gate.release()
         await visibility.waitUntilHidden()
 
-        #expect(visibility.isVisible == false)
+        // Assert
+        assertState(visibility, ExpectedState(isVisible: false))
     }
 
     @Test("連続で show() を呼ぶと前の自動非表示タイマーは張り直され、古いタイマーでは消えない")
     func consecutiveShow_reschedulesTimer() async {
-        // 1 回目の show の sleep を解放しても、2 回目の show で張り直された後なら非表示にならないことを検証する。
+        // Arrange: 1 回目 / 2 回目の sleep をそれぞれ別ゲートで制御する。
         let firstGate = SleepGate()
         let secondGate = SleepGate()
         let callCount = Counter()
@@ -92,22 +108,24 @@ struct PlaybackControlsVisibilityTests {
             }
         })
 
+        // Act: タイマー張り直し（1 回目の sleep はキャンセルされる）
         visibility.show()
-        visibility.show()  // タイマー張り直し（1 回目の sleep はキャンセルされる）
+        visibility.show()
 
-        // 1 回目の sleep を解放しても、その完了は古いタスクのものなので isVisible に影響しない。
+        // Act & Assert: 1 回目の sleep を解放してもそれは古いタスクのものなので影響しない
         firstGate.release()
         await Task.yield()
-        #expect(visibility.isVisible == true)
+        assertState(visibility, ExpectedState(isVisible: true))
 
-        // 2 回目（最新）のタイマーを解放すると非表示になる。
+        // Act & Assert: 2 回目（最新）のタイマーを解放すると非表示になる
         secondGate.release()
         await visibility.waitUntilHidden()
-        #expect(visibility.isVisible == false)
+        assertState(visibility, ExpectedState(isVisible: false))
     }
 
     @Test("toggle() の連続呼び出しでも自動非表示タイマーが張り直される")
     func consecutiveToggle_reschedulesTimer() async {
+        // Arrange
         let firstGate = SleepGate()
         let secondGate = SleepGate()
         let callCount = Counter()
@@ -120,36 +138,59 @@ struct PlaybackControlsVisibilityTests {
             }
         })
 
+        // Act: 表示 → 非表示 → 表示（2 回目の sleep 開始 / 張り直し相当）
         visibility.toggle()  // 非表示 -> 表示（1 回目の sleep 開始）
         visibility.hide()    // 一旦非表示にして
-        visibility.toggle()  // 非表示 -> 表示（2 回目の sleep 開始 / 張り直し相当）
+        visibility.toggle()  // 非表示 -> 表示（2 回目の sleep 開始）
 
-        // 古い（1 回目の）タイマーを解放しても最新の表示は維持される。
+        // Act & Assert: 古い（1 回目の）タイマーを解放しても最新の表示は維持される
         firstGate.release()
         await Task.yield()
-        #expect(visibility.isVisible == true)
+        assertState(visibility, ExpectedState(isVisible: true))
 
+        // Act & Assert: 最新のタイマーを解放すると非表示になる
         secondGate.release()
         await visibility.waitUntilHidden()
-        #expect(visibility.isVisible == false)
+        assertState(visibility, ExpectedState(isVisible: false))
     }
 
     @Test("hide() で自動非表示タイマーがキャンセルされ、その後 sleep が完了しても状態は変わらない")
     func hide_cancelsAutoHideTimer() async {
+        // Arrange
         let gate = SleepGate()
         let visibility = PlaybackControlsVisibility(sleep: { _ in try await gate.wait() })
-
         visibility.show()
-        #expect(visibility.isVisible == true)
+        assertState(visibility, ExpectedState(isVisible: true))
 
-        // hide はタイマーをキャンセルするので、その後に表示し直しても古いタイマーで消えない。
+        // Act: hide はタイマーをキャンセルする
         visibility.hide()
-        #expect(visibility.isVisible == false)
+        assertState(visibility, ExpectedState(isVisible: false))
 
-        // 元のタイマーの sleep を解放（キャンセル済みなので副作用なし）。
+        // Act & Assert: 元のタイマーの sleep を解放してもキャンセル済みなので副作用なし
         gate.release()
         await Task.yield()
-        #expect(visibility.isVisible == false)
+        assertState(visibility, ExpectedState(isVisible: false))
+    }
+
+    // MARK: - 共通 Assertion
+
+    /// PlaybackControlsVisibility の公開状態すべての期待値。
+    ///
+    /// 公開状態は `isVisible` のみ。各テストはこの値を指定して渡す。
+    private struct ExpectedState {
+        var isVisible: Bool = false
+    }
+
+    /// 公開状態を一括検証する共通 Assertion。
+    ///
+    /// 公開状態すべてを毎回検証することで、実装変更による意図しない状態変化を検知する。
+    /// Mock（注入した sleep の挙動）の検証は各ケースで別途行う。
+    private func assertState(
+        _ visibility: PlaybackControlsVisibility,
+        _ expected: ExpectedState,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) {
+        #expect(visibility.isVisible == expected.isVisible, sourceLocation: sourceLocation)
     }
 }
 

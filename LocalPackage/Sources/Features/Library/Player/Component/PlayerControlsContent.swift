@@ -24,8 +24,7 @@ struct PlayerControlsContent: View {
     let onTogglePlayPause: () -> Void
     
     var body: some View {
-        VStack(spacing: .zero) {
-            Spacer()
+        ZStack {
             HStack(spacing: 32) {
                 playerControlButton {
                     Image(systemName: "backward.fill")
@@ -46,31 +45,31 @@ struct PlayerControlsContent: View {
                 .disabled(!canPlayNext)
                 .foregroundStyle(.white)
             }
-            Spacer()
-            // シーク操作・残り時間表示（F-6）。シーク可能な長さがあるときのみ表示する。
-            if progress.isSeekable {
-                SeekBar(progress: progress, onSeek: onSeek)
-                    .padding(.bottom, 8)
-            }
-            HStack(spacing: 32) {
-                Spacer()
-                // シャッフル切り替え（F-5）。有効時はアクセントカラーで状態を示す。
-                playerControlButton {
-                    Image(systemName: "shuffle")
-                } action: {
-                    onToggleShuffle()
+            VStack(spacing: 24) {
+                // シーク操作・残り時間表示（F-6）。シーク可能な長さがあるときのみ表示する。
+                if progress.isSeekable {
+                    SeekBar(progress: progress, onSeek: onSeek)
+                        .padding(.bottom, 8)
                 }
-                .foregroundStyle(playbackOrder == .shuffle ? Color.accentColor : .white)
-                // リピート切り替え（F-5: off → all → one → off）。off 以外でアクセントカラー、one は 1 を示すシンボル。
-                playerControlButton {
-                    Image(systemName: repeatSymbolName)
-                } action: {
-                    onCycleRepeat()
+                HStack(spacing: 32) {
+                    Spacer()
+                    // シャッフル切り替え（F-5）。有効時はアクセントカラーで状態を示す。
+                    playerControlButton {
+                        Image(systemName: "shuffle")
+                    } action: {
+                        onToggleShuffle()
+                    }
+                    .foregroundStyle(playbackOrder == .shuffle ? Color.accentColor : .white)
+                    // リピート切り替え（F-5: off → all → one → off）。off 以外でアクセントカラー、one は 1 を示すシンボル。
+                    playerControlButton {
+                        Image(systemName: repeatSymbolName)
+                    } action: {
+                        onCycleRepeat()
+                    }
+                    .foregroundStyle(repeatMode == .off ? Color.white : Color.accentColor)
                 }
-                .foregroundStyle(repeatMode == .off ? Color.white : Color.accentColor)
             }
-            Spacer()
-                .frame(height: 24)
+            .frame(maxHeight: .infinity, alignment: .bottom)
         }
         .padding(.horizontal, 32)
         .font(.title)

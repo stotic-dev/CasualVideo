@@ -31,6 +31,59 @@ import Testing
 }
 ```
 
+## プレゼンテーションロジック（Store）のテスト
+
+Store のテストは状態遷移と副作用が絡み複雑になりやすい。可読性と回帰検知力を保つため、以下を**原則**とする。
+
+### 1. AAA パターンをコメントで明示する
+
+AAA（Arrange / Act / Assert）に倣ったとしても、複雑なテストではどこがどのフェーズか見逃しやすい。そのため**各ケースにフェーズ境界をコメントで明示する**こと。
+
+- `// Arrange`（準備）/ `// Act`（実行）/ `// Assert`（検証）を必ず置く。
+- 1 ケース内で複数回 Act → Assert する場合は `// Act` / `// Assert`（または `// Act & Assert`）を都度置き、フェーズの繰り返しが追えるようにする。
+
+### 2. 公開状態を一括検証する共通 Assertion を用意する
+
+ある操作の副作用として「関連する状態」だけを検証していると、実装変更で**意図しない別の状態が書き換わっても気付けない**。これを防ぐため、**Store の公開状態すべてを検証する共通 Assertion ヘルパー**を用意し、原則すべてのケースをこのヘルパーで検証する。
+
+- 期待値は「公開状態すべて」を持つ `ExpectedState` 構造体で表現し、既定値を初期状態に合わせておく（各ケースは差分のみ上書きする）。
+- ヘルパーには `sourceLocation: SourceLocation = #_sourceLocation` を渡し、失敗箇所が**呼び出し側の行**を指すようにする。
+- 共通 Assertion は「Store 自身の状態」を対象とする。注入した Proxy / クロージャ（Mock）の呼び出し検証は副作用に応じて**ケースごとに別途**行う。
+
+```swift
+private struct ExpectedState {
+    var isPlaying: Bool = false
+    var currentIndex: Int?
+    // …公開状態をすべて列挙し、既定値は初期状態に揃える
+}
+
+/// 公開状態すべてを毎回検証し、意図しない状態変化を検知する。
+private func assertState(
+    _ store: SomeStore,
+    _ expected: ExpectedState,
+    sourceLocation: SourceLocation = #_sourceLocation
+) {
+    #expect(store.isPlaying == expected.isPlaying, sourceLocation: sourceLocation)
+    #expect(store.currentIndex == expected.currentIndex, sourceLocation: sourceLocation)
+    // …公開状態をすべて検証
+}
+
+@Test func playNext_advances() async {
+    // Arrange
+    let played = Box<[String]>([])
+    let store = SomeStore(playerProxy: recordingProxy(played: played))
+    await store.start(playlist: assets, from: 0)
+
+    // Act
+    await store.playNext()
+
+    // Assert（公開状態は共通 Assertion でまとめて検証）
+    assertState(store, ExpectedState(isPlaying: true, currentIndex: 1))
+    // 副作用（Mock）はケース固有に検証
+    #expect(played.value == ["a", "b"])
+}
+```
+
 ## 実行コマンド
 
 ```bash

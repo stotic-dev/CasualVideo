@@ -1,8 +1,18 @@
+//
+//  SeekBar.swift
+//  LocalPackage
+//
+//  Created by Taichi Sato on 2026/06/06.
+//
+
+import SwiftUI
+import Core
+
 /// 再生位置のシークと経過 / 全体時間を表示する presentational なシークバー（F-6）。
 ///
 /// ドラッグ中は内部の一時値（`editingSeconds`）でつまみ位置を即時追従させ、操作中は外部の進捗更新で
 /// つまみが揺れないようにする。ドラッグ終了時に `onSeek` で確定位置を親へ伝える。
-private struct SeekBar: View {
+struct SeekBar: View {
 
     /// 現在の再生進捗（経過時間・総再生時間）。
     let progress: PlaybackProgress
@@ -15,13 +25,10 @@ private struct SeekBar: View {
     var body: some View {
         VStack(spacing: 4) {
             slider
-            HStack {
-                Text(Self.format(displaySeconds))
-                Spacer()
-                Text(Self.format(progress.duration))
-            }
-            .font(.caption2.monospacedDigit())
-            .foregroundStyle(.white)
+            Text("\(Self.format(displaySeconds)) / \(Self.format(progress.duration))")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.white)
         }
     }
 
@@ -61,4 +68,31 @@ private struct SeekBar: View {
         }
         return String(format: "%d:%02d", m, s)
     }
+}
+
+#Preview("SeekBar_再生位置_0", traits: .sizeThatFitsLayout) {
+    SeekBar(
+        progress: .init(currentTime: 0, duration: 3000),
+        onSeek: { _ in }
+    )
+    .padding(16)
+    .background(.black)
+}
+
+#Preview("SeekBar_再生位置_真ん中", traits: .sizeThatFitsLayout) {
+    SeekBar(
+        progress: .init(currentTime: 1500, duration: 3000),
+        onSeek: { _ in }
+    )
+    .padding(16)
+    .background(.black)
+}
+
+#Preview("SeekBar_再生位置_終わり", traits: .sizeThatFitsLayout) {
+    SeekBar(
+        progress: .init(currentTime: 3000, duration: 3000),
+        onSeek: { _ in }
+    )
+    .padding(16)
+    .background(.black)
 }
