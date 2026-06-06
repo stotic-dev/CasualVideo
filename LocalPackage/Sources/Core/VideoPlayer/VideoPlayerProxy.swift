@@ -25,6 +25,16 @@ public struct VideoPlayerProxy: Sendable {
     /// 直接操作しないこと（責務分離・テスタビリティのため）。
     public var player: @MainActor @Sendable () -> AVPlayer?
 
+    /// 描画レイヤーへ player をバインドし、その layer で PIP を構成する（描画面セットアップ）。
+    ///
+    /// `player()` と同じ「描画バインドの境界」として AVPlayerLayer を受け渡す。
+    /// player の layer へのバインド（VideoPlayerClient の責務）と、その layer での PIP 構成
+    /// （PictureInPictureClient の責務）という複数 Infra をまたぐ手順は `App` の `.live` が組み立てる。
+    public var attachPlayerLayer: @MainActor @Sendable (AVPlayerLayer) -> Void
+
+    /// 自動 PIP 起動（F-3）の有効/無効を切り替える。
+    public var setPictureInPictureEnabled: @MainActor @Sendable (Bool) -> Void
+
     /// 指定アセットの動画を読み込み、再生を開始する。読み込み成否を返す。
     public var loadAndPlay: @Sendable (_ id: VideoAsset.ID) async -> Bool
 
@@ -49,21 +59,37 @@ public struct VideoPlayerProxy: Sendable {
     /// 操作（購読登録）はメインアクター上で行う。
     public var observeDidPlayToEnd: @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void
 
+    /// 指定秒へシークする（シークバー操作 / F-6）。
+    public var seek: @MainActor @Sendable (_ seconds: TimeInterval) -> Void
+
+    /// 再生進捗（現在位置・総再生時間）を一定間隔で購読する。更新のたびにハンドラが呼ばれる。
+    ///
+    /// シークバーの位置・長さ表示（F-6）の起点。再生エンジンの時刻監視は `Infra` に隔離する。
+    public var observeProgress: @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable (PlaybackProgress) -> Void) -> Void
+
     public init(
         player: @escaping @MainActor @Sendable () -> AVPlayer? = { nil },
+        attachPlayerLayer: @escaping @MainActor @Sendable (AVPlayerLayer) -> Void = { _ in },
+        setPictureInPictureEnabled: @escaping @MainActor @Sendable (Bool) -> Void = { _ in },
         loadAndPlay: @escaping @Sendable (_ id: VideoAsset.ID) async -> Bool = { _ in false },
         play: @escaping @MainActor @Sendable () -> Void = {},
         pause: @escaping @MainActor @Sendable () -> Void = {},
         setMuted: @escaping @MainActor @Sendable (_ muted: Bool) -> Void = { _ in },
         prepareForBackgroundPlayback: @escaping @MainActor @Sendable () -> Void = {},
-        observeDidPlayToEnd: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in }
+        observeDidPlayToEnd: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in },
+        seek: @escaping @MainActor @Sendable (_ seconds: TimeInterval) -> Void = { _ in },
+        observeProgress: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable (PlaybackProgress) -> Void) -> Void = { _ in }
     ) {
         self.player = player
+        self.attachPlayerLayer = attachPlayerLayer
+        self.setPictureInPictureEnabled = setPictureInPictureEnabled
         self.loadAndPlay = loadAndPlay
         self.play = play
         self.pause = pause
         self.setMuted = setMuted
         self.prepareForBackgroundPlayback = prepareForBackgroundPlayback
         self.observeDidPlayToEnd = observeDidPlayToEnd
+        self.seek = seek
+        self.observeProgress = observeProgress
     }
 }

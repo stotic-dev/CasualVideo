@@ -2,17 +2,17 @@
 //  VideoPlayerScreen.swift
 //  Library
 //
-//  一覧から選んだ動画を起点に、一覧全体をプレイリストとして連続再生する再生画面（F-2 / F-4）。
+//  一覧から選んだ動画を起点に、一覧全体をプレイリストとして連続再生する再生画面（F-2 / F-4 / F-5）。
 //
 //  Screen と presentational View の分離方針は docs/swiftui.md を参照。
 //  - Screen（VideoPlayerScreen）: 再生エンジンの操作（VideoPlayerProxy / PlaylistStore 経由）と副作用を担う。
 //    AVPlayer / AVPlayerItem を View 内で直接生成・操作せず、すべて Proxy / Store へ委譲する。
 //  - View（VideoPlayerView）: 受け取った再生状態（VideoPlayerViewState）と操作クロージャを表示するだけ。副作用を持たない。
 //
-//  連続再生（F-4）の進行管理（現在位置・次/前送り・再生終了での自動遷移）は Core の PlaylistStore が担う。
+//  連続再生（F-4）の進行管理（現在位置・次/前送り・再生終了での自動遷移）と
+//  シャッフル / リピート（F-5）の状態管理は Core の PlaylistStore が担う。
 //
 
-import AVFoundation
 import Core
 import SwiftUI
 
@@ -26,12 +26,19 @@ public struct VideoPlayerScreen: View {
     let startIndex: Int
 
     @Environment(\.videoPlayerProxy) private var playerProxy
+    @Environment(\.dismiss) var dismiss
 
-    /// 再生リソースの表示状態（AVPlayer は View ライフサイクルに紐づくため View 層で保持）。
+    /// 再生リソースの読み込み状態（描画面のバインドは Proxy 経由で行うため、状態は進行のみを表す）。
     @State private var state: VideoPlayerViewState = .loading
 
     /// 連続再生の進行を管理する Store。再生画面のライフサイクルに紐づくため View 層で生成・保持する。
     @State private var playlistStore: PlaylistStore?
+
+    /// 再生コントロールの表示・非表示と自動非表示タイマーを管理するドメインモデル。
+    /// 表示制御ロジックは View に持たせず、このモデルへ委譲する。
+    @State private var controlsVisibility = PlaybackControlsVisibility()
+    
+    @State var errorAlertStore = ErrorAlertStore()
 
     public init(playlist: [VideoAsset], startIndex: Int = 0) {
         self.playlist = playlist
@@ -43,7 +50,13 @@ public struct VideoPlayerScreen: View {
             .navigationTitle(navigationTitle)
             .task {
                 // ライフサイクルに紐づく副作用（読み込み・連続再生開始）は Screen 側に置く。
-                await start()
+                await onAppear()
+            }
+            .onChange(of: playlistStore?.error) { _, newValue in
+                onError(newValue)
+            }
+            .errorAlert(errorAlertStore) {
+                onDismiss()
             }
     }
 
@@ -54,8 +67,19 @@ public struct VideoPlayerScreen: View {
             totalCount: playlistStore?.totalCount ?? 0,
             canPlayNext: playlistStore?.canPlayNext ?? false,
             canPlayPrevious: playlistStore?.canPlayPrevious ?? false,
+            isPlaying: playlistStore?.isPlaying ?? false,
+            isPreparingItem: playlistStore?.isPreparingItem ?? false,
+            playbackOrder: playlistStore?.playbackOrder ?? .sequential,
+            repeatMode: playlistStore?.repeatMode ?? .off,
+            progress: playlistStore?.progress ?? PlaybackProgress(),
+            areControlsVisible: controlsVisibility.isVisible,
+            onToggleControls: { controlsVisibility.toggle() },
+            onTogglePlayPause: { playlistStore?.togglePlayPause() },
             onPlayNext: { await playlistStore?.playNext() },
-            onPlayPrevious: { await playlistStore?.playPrevious() }
+            onPlayPrevious: { await playlistStore?.playPrevious() },
+            onToggleShuffle: { playlistStore?.toggleShuffle() },
+            onCycleRepeat: { playlistStore?.cycleRepeatMode() },
+            onSeek: { playlistStore?.seek(to: $0) }
         )
         #if os(iOS)
         return view.navigationBarTitleDisplayMode(.inline)
@@ -68,9 +92,11 @@ public struct VideoPlayerScreen: View {
         guard let date = playlistStore?.currentAsset?.creationDate else { return "再生" }
         return date.formatted(.dateTime.year().month().day())
     }
+}
 
-    /// Store へ連続再生を委譲し、描画用の AVPlayer を受け取って表示状態を更新する。
-    private func start() async {
+private extension VideoPlayerScreen {
+    /// Store へ連続再生を委譲し、読み込み状態を更新する。描画面のバインドは CustomVideoPlayer が Proxy 経由で行う。
+    func onAppear() async {
         // 既に準備済みなら作り直さない（再表示時の二重ロード防止）。
         if case .ready = state { return }
         guard !playlist.isEmpty else {
@@ -85,12 +111,23 @@ public struct VideoPlayerScreen: View {
         playlistStore = store
         await store.start(playlist: playlist, from: startIndex)
 
-        guard let player = playerProxy.player() else {
-            state = .failed
-            return
+        // 再生開始できたか（=対象アセットが選択できたか）で readiness を判定する。
+        // 描画用の AVPlayer は取り出さず、CustomVideoPlayer が Proxy 経由で描画面を構成する。
+        state = store.currentAsset == nil ? .failed : .ready
+
+        // 読み込み完了（.ready）時はコントロールを表示し、自動非表示タイマーを開始する。
+        if case .ready = state {
+            controlsVisibility.show()
         }
-        // player は描画（AVPlayerLayer へのバインド）にのみ使う。操作は Proxy / Store 経由。
-        state = .ready(player)
+    }
+    
+    func onError(_ error: ErrorAlertItem?) {
+        guard let error = error else { return }
+        errorAlertStore.setItem(error)
+    }
+    
+    func onDismiss() {
+        dismiss()
     }
 }
 
@@ -103,8 +140,25 @@ struct VideoPlayerView: View {
     let totalCount: Int
     let canPlayNext: Bool
     let canPlayPrevious: Bool
+    /// 現在再生中かどうか（再生/一時停止ボタンの表示切り替えに用いる）。
+    let isPlaying: Bool
+    /// PlayerItem セットアップ中かどうか。true の間はコントロールを非活性化しインジケーターを表示する。
+    let isPreparingItem: Bool
+    let playbackOrder: PlaybackOrder
+    let repeatMode: RepeatMode
+    /// 現在再生中アイテムの再生進捗（シークバーの位置・長さ表示に用いる）。
+    let progress: PlaybackProgress
+    /// 再生コントロールを表示中かどうか。タップでトグルされ、一定時間後に自動で非表示になる。
+    let areControlsVisible: Bool
+    /// 画面タップによるコントロール表示・非表示のトグル。
+    let onToggleControls: () -> Void
+    let onTogglePlayPause: () -> Void
     let onPlayNext: () async -> Void
     let onPlayPrevious: () async -> Void
+    let onToggleShuffle: () -> Void
+    let onCycleRepeat: () -> Void
+    /// シークバー操作による再生位置変更（指定秒へシーク）。
+    let onSeek: (TimeInterval) -> Void
 
     var body: some View {
         content
@@ -119,11 +173,14 @@ struct VideoPlayerView: View {
         case .loading:
             ProgressView()
                 .tint(.white)
-
-        case .ready(let player):
-            CustomVideoPlayer(player: player)
+            
+        case .ready:
+            CustomVideoPlayer()
+            // 画面タップでコントロールの表示・非表示をトグルする。
+                .contentShape(.rect)
+                .onTapGesture { onToggleControls() }
                 .overlay(alignment: .top) {
-                    if totalCount > 1, let position {
+                    if totalCount > 1, let position, areControlsVisible {
                         Text("\(position) / \(totalCount)")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.white)
@@ -131,11 +188,26 @@ struct VideoPlayerView: View {
                     }
                 }
                 .overlay(alignment: .bottom) {
-                    if totalCount > 1 {
-                        playbackControls
+                    if totalCount >= 1, areControlsVisible {
+                        PlayerControlsContent(
+                            progress: progress,
+                            playbackOrder: playbackOrder,
+                            repeatMode: repeatMode,
+                            canPlayPrevious: canPlayPrevious,
+                            canPlayNext: canPlayNext,
+                            isPreparingItem: isPreparingItem,
+                            isPlaying: isPlaying,
+                            onSeek: onSeek,
+                            onPlayPrevious: onPlayPrevious,
+                            onPlayNext: onPlayNext,
+                            onToggleShuffle: onToggleShuffle,
+                            onCycleRepeat: onCycleRepeat,
+                            onTogglePlayPause: onTogglePlayPause
+                        )
                     }
                 }
-
+                .animation(.easeInOut(duration: 0.2), value: areControlsVisible)
+            
         case .failed:
             ContentUnavailableView(
                 "再生できません",
@@ -144,25 +216,46 @@ struct VideoPlayerView: View {
             )
         }
     }
-
-    private var playbackControls: some View {
-        HStack(spacing: 40) {
-            Button {
-                Task { await onPlayPrevious() }
-            } label: {
-                Image(systemName: "backward.fill")
-            }
-            .disabled(!canPlayPrevious)
-
-            Button {
-                Task { await onPlayNext() }
-            } label: {
-                Image(systemName: "forward.fill")
-            }
-            .disabled(!canPlayNext)
-        }
-        .font(.title)
-        .foregroundStyle(.white)
-        .padding()
-    }
 }
+
+#if DEBUG
+@MainActor
+private func previewVideoPlayerView(
+    state: VideoPlayerViewState = .ready,
+    position: Int? = 2,
+    totalCount: Int = 5,
+    isPlaying: Bool = true,
+    isPreparingItem: Bool = false,
+    playbackOrder: PlaybackOrder = .sequential,
+    repeatMode: RepeatMode = .off,
+    progress: PlaybackProgress = PlaybackProgress(currentTime: 42, duration: 215),
+    areControlsVisible: Bool = true
+) -> some View {
+    VideoPlayerView(
+        state: state,
+        position: position,
+        totalCount: totalCount,
+        canPlayNext: true,
+        canPlayPrevious: true,
+        isPlaying: isPlaying,
+        isPreparingItem: isPreparingItem,
+        playbackOrder: playbackOrder,
+        repeatMode: repeatMode,
+        progress: progress,
+        areControlsVisible: areControlsVisible,
+        onToggleControls: {},
+        onTogglePlayPause: {},
+        onPlayNext: {},
+        onPlayPrevious: {},
+        onToggleShuffle: {},
+        onCycleRepeat: {},
+        onSeek: { _ in }
+    )
+    .environment(\.isPreview, true)
+}
+
+#Preview {
+    previewVideoPlayerView()
+}
+
+#endif

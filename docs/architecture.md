@@ -36,24 +36,93 @@ ApplicationTarget ──> App ──┬──> Features/<Feature> ──> Core
 - すべての依存を **assemble（組み立て）** するモジュール。
 - `Repository` などの依存を `Impl` オブジェクトとして実装し、`Environment` に DI する。
 - `Infra` モジュールへの参照を持ち、それを用いて `Repository` の `Impl` を実装する。
+- **複数の Infra をまたぐオーケストレーション（取得 → 変換 → 別 Infra へ受け渡し、等）はこの `.live`（Impl）ファクトリで組み立てる。** これにより各 Infra Client は単一責務に保たれ、組み合わせの都合は assemble 層に集約される。
+
+```swift
+// App: 複数 Infra を組み合わせて Impl を構築する例
+extension VideoPlayerProxy {
+    static func live(
+        playerClient: VideoPlayerClient,        // AVPlayer の窓口
+        photoLibraryClient: PhotoLibraryClient  // PhotoKit の窓口
+    ) -> VideoPlayerProxy {
+        VideoPlayerProxy(
+            // 「取得（PhotoKit）→ 差し替え → 再生」という複数 Infra をまたぐ手順はここで組み立てる。
+            loadAndPlay: { id in
+                guard let item = await photoLibraryClient.loadPlayerItem(localIdentifier: id) else { return false }
+                await playerClient.replaceCurrentItem(item)
+                await playerClient.play()
+                return true
+            }
+            // ...
+        )
+    }
+}
+```
+
+> 補足: orchestration が複雑化し、独立したテストが必要になった場合は、`Infra` と `App` の間に専用の Data 層（DataSource=Infra / Repository=Data）を切り出す選択肢もある。ただし現状はこの assemble 方式を既定とする。
 
 ### Features/\<Feature\>
 
 - Feature の粒度でモジュールを切り分ける。
 - 画面（View）と、その Feature 特有のビジネスロジックを含む。
 - 横断的に使う定義（他 Feature や App と共有するもの）は持たず、`Core` を参照する。
+- **その Feature 内でしか参照しないモデル（ドメインモデル・Store・値型など）は Feature 内に置く。**`Core` には上げない（後述「配置スコープ最小化の原則」）。
 
 ### Core
 
 - モジュール間をまたぐ定義を含む。
 - 例: `Repository` の型定義（`App` でも `Features` でも参照するため `Core` に置く）。後述の通り protocol ではなく **struct** で定義する。
 - ドメインモデル、および UseCase（複数 Feature のプレゼンテーションロジックで重複する部分のファサード）を含む。
+- **`Core` に置くのは「実際にモジュールをまたいで参照される」定義に限る。** 単一 Feature 内で完結するものを `Core` に置かない（後述「配置スコープ最小化の原則」）。
+
+### 配置スコープ最小化の原則（重要）
+
+**モデルは「実際に参照される最小のスコープ」に置く。`Core` は共有のための置き場であって、デフォルトの置き場ではない。**
+
+- ドメインモデル・Store・値型などを実装するときは、まず **その Feature 内に閉じられないか** を検討する。単一 Feature でしか使わないものは、その `Features/<Feature>` 内に置きカプセル化する。
+- **「いつか他でも使うかも」で先回りして `Core` に上げない。** 実際に 2 つ目の参照元（別 Feature や App）が現れた時点で初めて `Core` へ引き上げる。
+- 理由:
+  - **不要なスコープ拡大を防ぐ。** `Core` に置くと全モジュールから参照可能になり、本来 Feature 内の実装詳細だったものが公開 API（`public`）化してしまう。変更の影響範囲が無用に広がる。
+  - **モジュール境界でカプセル化が効く。** Feature 内に閉じておけば `internal` で隠蔽でき、その Feature の関心事として凝集が保たれる。
+- 判断基準: **「App もしくは複数の Feature から参照されるか？」が Yes のものだけを `Core` に置く。**それ以外は Feature 内（あるいは Infra 内）に留める。
+  - 例: `PlaylistStore` / `PlaybackControlsVisibility` などプレイヤー画面でのみ使う Store は `Features/Library` 内に置く。`VideoAsset` や `Repository` 型のように App・複数 Feature から参照されるものは `Core` に置く。
 
 ### Infra
 
 - リモートデータソース・ローカルデータソースなど、**プロセス外依存と直接やりとりする**オブジェクトを含む。
 - プロセス外依存の **唯一の情報源（single source of truth）** を管理する。
 - `App` がこれを参照して `Repository` の `Impl` を実装する。
+
+#### Infra Client の責務境界（重要）
+
+各 Infra Client は **1 つのプロセス外依存に対する単一責務**に閉じる。次を守ること:
+
+- **Client は「使う側（消費側）の都合」を持ち込まない。** 単純なコマンド／クエリの API だけを公開する。
+  - 例: AVPlayer の Client は `replaceCurrentItem(_:)` / `play()` を公開するだけ。「どの動画を再生するか（`localIdentifier` 等）」「取得してから差し替えて再生する」といった**使う側の手順**は持たない。
+  - 理由: 使う側を意識した API を Infra に置くと、仕様変更時の影響が Infra まで波及し、変更範囲が広がる。
+- **Infra Client 同士を依存させない。** 1 つの Client が別の Client を生成・保持しない（例: AVPlayer の Client が PhotoKit の Client を持たない）。別々のプロセス外依存は疎結合に保つ。
+- **複数の Infra を組み合わせた処理（オーケストレーション）は Infra に置かない。** その組み立ては `App` の assemble 層が担う（後述）。
+
+#### フレームワーク型（再生エンジン等）の隔離（重要）
+
+**プロセス外依存を表すフレームワークの型は、その型を直接生成・保持・操作する実装ごと Infra Client に隔離する。** `Features` / `Core` のロジックや View からこれらの型を直接参照・操作しないこと。
+
+- 隔離対象の例（AVFoundation / AVKit / システム機能の窓口）:
+  - `AVPlayer` / `AVPlayerItem`（再生エンジン）→ `VideoPlayerClient`
+  - `AVPictureInPictureController`（PIP）→ `PictureInPictureClient`
+  - `AVAudioSession`（オーディオセッション）→ `AudioSessionClient`
+  - 同様に、`PHAsset` 等の PhotoKit 型、永続化・ネットワーク等のフレームワーク型も Infra Client に閉じる。
+- **View / Features / Core は、これらの型を直接触らず `Core` の Proxy（struct + クロージャ）経由で操作する。** 操作（再生・停止・PIP 構成など）は Proxy のメソッドで行い、生のフレームワーク型を取り回さない。
+- **複数のフレームワーク型をまたぐ手順は `App` の assemble 層（`.live`）でオーケストレーションする。** 各 Infra Client は単一責務に保つ（例: 「player を layer にバインド → その layer で PIP を構成」は `VideoPlayerProxy.live` が `VideoPlayerClient` と `PictureInPictureClient` を組み合わせて組み立てる）。
+
+##### 唯一の例外: 描画サーフェスの所有
+
+UIKit/SwiftUI の都合で **View が所有せざるを得ない「描画サーフェス」型に限り**、View 層が保持してよい。
+
+- 例: `AVPlayerLayer` は `UIView.layerClass` のバッキングレイヤーとして View が所有する（レイアウト追従のため）。これは「再生エンジンの描画面」であり、View の関心事のため例外的に許容する。
+- ただし **その描画サーフェスへの操作（player のバインド・PIP コントローラ生成など）は View で行わず、Proxy に渡して Infra に委譲する。** View は「自分が所有するサーフェスを Proxy に引き渡す」だけに留める。
+  - 例: `PlayerViewController` は所有する `AVPlayerLayer` を `videoPlayerProxy.attachPlayerLayer(_:)` に渡すのみ。`AVPlayer` のバインドと `AVPictureInPictureController` の生成は Proxy → Infra 側が担う。
+- 逆に、`AVPlayer` や `AVPictureInPictureController` のような「エンジン／コントローラ」型を View が直接生成・保持・操作するのは **禁止**（描画サーフェスの例外には含めない）。
 
 ## DI と抽象化の方針
 

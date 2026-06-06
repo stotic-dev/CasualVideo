@@ -4,8 +4,10 @@
 //
 //  AVPlayer による再生エンジンの唯一の窓口（single source of truth）。
 //
-//  AVPlayer インスタンスを保持し、アイテムの読み込み（PhotoKit 経由）・差し替え・再生制御を
-//  ここに閉じ込める。`App` がこれを参照して `VideoPlayerProxy` の本番実装を組み立てる。
+//  AVPlayer インスタンスを保持し、アイテムの差し替え・再生制御という AVPlayer 単体の操作だけを
+//  ここに閉じ込める。再生アイテムの取得（PhotoKit 等）や「どの動画を再生するか」という使う側の
+//  都合は持たない。複数 Infra を組み合わせた再生フロー（取得 → 差し替え → 再生）の組み立ては
+//  `App` が `VideoPlayerProxy` の本番実装として担う。
 //
 
 import AVFoundation
@@ -22,30 +24,36 @@ public final class VideoPlayerClient {
     /// 再生レイヤー（AVPlayerLayer）へバインドするための AVPlayer。
     public let player = AVPlayer()
 
-    /// アイテム読み込みのための PhotoKit クライアント。
-    private let photoLibrary = PhotoLibraryClient()
-
     /// 現在再生中アイテムの再生完了通知の購読トークン。
     private var didPlayToEndObserver: NSObjectProtocol?
 
     /// 再生完了時に呼び出すハンドラ（プレイリストの自動遷移に使う / F-4）。
     private var didPlayToEndHandler: (() -> Void)?
 
+    /// 定期的な再生時刻監視の購読トークン（シークバー更新 / F-6）。
+    private var periodicTimeObserver: Any?
+
     public nonisolated init() {}
 
-    /// 指定アセットの動画を読み込んで差し替え、再生を開始する。読み込み成否を返す。
+    /// 再生アイテムを差し替える。差し替えたアイテムの再生完了通知を購読し直す。
     ///
-    /// iCloud 上の動画も対象とする（`PhotoLibraryClient.loadPlayerItem` がネットワークアクセスを許可）。
-    public func loadAndPlay(localIdentifier: String) async -> Bool {
-        guard let item = await photoLibrary.loadPlayerItem(localIdentifier: localIdentifier) else {
-            return false
+    /// アイテムの取得元（PhotoKit など）は問わない。呼び出し側が用意した `AVPlayerItem` を受け取り、
+    /// AVPlayer へ載せ替えるだけに責務を限定する。
+    public func replaceCurrentItem(_ item: sending AVPlayerItem) {
+        removeDidPlayToEndObserver()
+        player.replaceCurrentItem(with: item)
+        didPlayToEndObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.didPlayToEndHandler?()
+            }
         }
-        replaceCurrentItem(with: item)
-        player.play()
-        return true
     }
 
-    /// 再生を再開する。
+    /// 再生を開始・再開する。
     public func play() {
         player.play()
     }
@@ -67,21 +75,39 @@ public final class VideoPlayerClient {
         didPlayToEndHandler = handler
     }
 
-    // MARK: - Private
+    /// 指定秒へシークする。シークバー操作（F-6）からの再生位置変更に用いる。
+    public func seek(to seconds: TimeInterval) {
+        let time = CMTime(seconds: seconds, preferredTimescale: 600)
+        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+    }
 
-    /// 再生アイテムを差し替え、そのアイテムの再生完了通知を購読し直す。
-    private func replaceCurrentItem(with item: AVPlayerItem) {
-        removeDidPlayToEndObserver()
-        player.replaceCurrentItem(with: item)
-        didPlayToEndObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: item,
+    /// 再生時刻を一定間隔で購読する。更新のたびに「現在位置（秒）・総再生時間（秒）」を `handler` へ渡す。
+    ///
+    /// シークバーの位置・長さ表示（F-6）の起点となる。総再生時間が未確定なら 0 を渡す。
+    public func observeTime(
+        interval: TimeInterval = 0.5,
+        handler: @escaping @MainActor @Sendable (_ currentTime: TimeInterval, _ duration: TimeInterval) -> Void
+    ) {
+        removePeriodicTimeObserver()
+        let observerInterval = CMTime(seconds: interval, preferredTimescale: 600)
+        periodicTimeObserver = player.addPeriodicTimeObserver(
+            forInterval: observerInterval,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] time in
             MainActor.assumeIsolated {
-                self?.didPlayToEndHandler?()
+                let duration = self?.player.currentItem?.duration.seconds ?? 0
+                let validDuration = (duration.isFinite ? duration : 0)
+                handler(time.seconds, validDuration)
             }
         }
+    }
+
+    // MARK: - Private
+
+    private func removePeriodicTimeObserver() {
+        guard let periodicTimeObserver else { return }
+        player.removeTimeObserver(periodicTimeObserver)
+        self.periodicTimeObserver = nil
     }
 
     private func removeDidPlayToEndObserver() {
