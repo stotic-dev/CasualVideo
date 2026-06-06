@@ -54,8 +54,11 @@ public struct VideoPlayerScreen: View {
             totalCount: playlistStore?.totalCount ?? 0,
             canPlayNext: playlistStore?.canPlayNext ?? false,
             canPlayPrevious: playlistStore?.canPlayPrevious ?? false,
+            isPlaying: playlistStore?.isPlaying ?? false,
+            isPreparingItem: playlistStore?.isPreparingItem ?? false,
             playbackOrder: playlistStore?.playbackOrder ?? .sequential,
             repeatMode: playlistStore?.repeatMode ?? .off,
+            onTogglePlayPause: { playlistStore?.togglePlayPause() },
             onPlayNext: { await playlistStore?.playNext() },
             onPlayPrevious: { await playlistStore?.playPrevious() },
             onToggleShuffle: { playlistStore?.toggleShuffle() },
@@ -106,8 +109,13 @@ struct VideoPlayerView: View {
     let totalCount: Int
     let canPlayNext: Bool
     let canPlayPrevious: Bool
+    /// 現在再生中かどうか（再生/一時停止ボタンの表示切り替えに用いる）。
+    let isPlaying: Bool
+    /// PlayerItem セットアップ中かどうか。true の間はコントロールを非活性化しインジケーターを表示する。
+    let isPreparingItem: Bool
     let playbackOrder: PlaybackOrder
     let repeatMode: RepeatMode
+    let onTogglePlayPause: () -> Void
     let onPlayNext: () async -> Void
     let onPlayPrevious: () async -> Void
     let onToggleShuffle: () -> Void
@@ -153,41 +161,70 @@ struct VideoPlayerView: View {
     }
 
     private var playbackControls: some View {
-        HStack(spacing: 32) {
-            // シャッフル切り替え（F-5）。有効時はアクセントカラーで状態を示す。
-            Button {
-                onToggleShuffle()
-            } label: {
-                Image(systemName: "shuffle")
-            }
-            .foregroundStyle(playbackOrder == .shuffle ? Color.accentColor : .white)
+        VStack(spacing: .zero) {
+            Spacer()
+            HStack(spacing: 32) {
+                Button {
+                    Task { await onPlayPrevious() }
+                } label: {
+                    Image(systemName: "backward.fill")
+                }
+                .disabled(!canPlayPrevious)
+                .foregroundStyle(.white)
+                // 再生 / 一時停止。セットアップ中はインジケーターへ差し替える。
+                playPauseControl
 
-            Button {
-                Task { await onPlayPrevious() }
-            } label: {
-                Image(systemName: "backward.fill")
-            }
-            .disabled(!canPlayPrevious)
-            .foregroundStyle(.white)
+                Button {
+                    Task { await onPlayNext() }
+                } label: {
+                    Image(systemName: "forward.fill")
+                }
+                .disabled(!canPlayNext)
+                .foregroundStyle(.white)
 
-            Button {
-                Task { await onPlayNext() }
-            } label: {
-                Image(systemName: "forward.fill")
+                
             }
-            .disabled(!canPlayNext)
-            .foregroundStyle(.white)
-
-            // リピート切り替え（F-5: off → all → one → off）。off 以外でアクセントカラー、one は 1 を示すシンボル。
-            Button {
-                onCycleRepeat()
-            } label: {
-                Image(systemName: repeatSymbolName)
+            Spacer()
+            HStack(spacing: 32) {
+                Spacer()
+                // シャッフル切り替え（F-5）。有効時はアクセントカラーで状態を示す。
+                Button {
+                    onToggleShuffle()
+                } label: {
+                    Image(systemName: "shuffle")
+                }
+                .foregroundStyle(playbackOrder == .shuffle ? Color.accentColor : .white)
+                // リピート切り替え（F-5: off → all → one → off）。off 以外でアクセントカラー、one は 1 を示すシンボル。
+                Button {
+                    onCycleRepeat()
+                } label: {
+                    Image(systemName: repeatSymbolName)
+                }
+                .foregroundStyle(repeatMode == .off ? Color.white : Color.accentColor)
             }
-            .foregroundStyle(repeatMode == .off ? Color.white : Color.accentColor)
+            Spacer()
+                .frame(height: 24)
         }
+        .padding(.horizontal, 32)
         .font(.title)
-        .padding()
+        // PlayerItem セットアップ中はコントロール全体を非活性化する。
+        .disabled(isPreparingItem)
+    }
+
+    /// 再生 / 一時停止ボタン。セットアップ中はインジケーターを表示する。
+    @ViewBuilder
+    private var playPauseControl: some View {
+        if isPreparingItem {
+            ProgressView()
+                .tint(.white)
+        } else {
+            Button {
+                onTogglePlayPause()
+            } label: {
+                Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+            }
+            .foregroundStyle(.white)
+        }
     }
 
     /// リピートモードに対応する SF Symbol 名。
@@ -198,3 +235,66 @@ struct VideoPlayerView: View {
         }
     }
 }
+
+#if DEBUG
+
+// MARK: - Preview
+
+/// 任意の状態を再現できるよう、presentational な `VideoPlayerView` を直接組み立てる Preview ヘルパー。
+///
+/// 再生エンジンは Preview で動作しないため、`CustomVideoPlayer` がモックアップへ切り替わるよう
+/// `.environment(\.isPreview, true)` を注入する。
+@MainActor
+private func previewVideoPlayerView(
+    state: VideoPlayerViewState = .ready,
+    position: Int? = 2,
+    totalCount: Int = 5,
+    isPlaying: Bool = true,
+    isPreparingItem: Bool = false,
+    playbackOrder: PlaybackOrder = .sequential,
+    repeatMode: RepeatMode = .off
+) -> some View {
+    VideoPlayerView(
+        state: state,
+        position: position,
+        totalCount: totalCount,
+        canPlayNext: true,
+        canPlayPrevious: true,
+        isPlaying: isPlaying,
+        isPreparingItem: isPreparingItem,
+        playbackOrder: playbackOrder,
+        repeatMode: repeatMode,
+        onTogglePlayPause: {},
+        onPlayNext: {},
+        onPlayPrevious: {},
+        onToggleShuffle: {},
+        onCycleRepeat: {}
+    )
+    .environment(\.isPreview, true)
+}
+
+#Preview("再生中") {
+    previewVideoPlayerView(isPlaying: true)
+}
+
+#Preview("一時停止中") {
+    previewVideoPlayerView(isPlaying: false)
+}
+
+#Preview("セットアップ中") {
+    previewVideoPlayerView(isPreparingItem: true)
+}
+
+#Preview("シャッフル + 全体リピート") {
+    previewVideoPlayerView(playbackOrder: .shuffle, repeatMode: .all)
+}
+
+#Preview("読み込み中") {
+    previewVideoPlayerView(state: .loading)
+}
+
+#Preview("再生失敗") {
+    previewVideoPlayerView(state: .failed)
+}
+
+#endif

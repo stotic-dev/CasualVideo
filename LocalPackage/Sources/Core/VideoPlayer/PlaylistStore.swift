@@ -28,6 +28,17 @@ public final class PlaylistStore {
     /// リピートモード（off / all / one）。
     public private(set) var repeatMode: RepeatMode
 
+    /// 現在再生中かどうか（再生 = true / 一時停止 = false）。
+    ///
+    /// 再生/一時停止ボタンの表示状態に用いる。再生エンジンへの操作は `VideoPlayerProxy` 経由で行う。
+    public private(set) var isPlaying = false
+
+    /// 再生アイテム（PlayerItem）をセットアップ中かどうか。
+    ///
+    /// `loadAndPlay`（読み込み完了まで await）が進行している間 true。
+    /// この間は再生コントロールを非活性化しインジケーターを表示する（UI 側の判断材料）。
+    public private(set) var isPreparingItem = false
+
     private let playerProxy: VideoPlayerProxy
 
     /// `playlist` のインデックスを再生する順に並べた配列。シャッフル時はここが入れ替わる。
@@ -146,6 +157,20 @@ public final class PlaylistStore {
         repeatMode = repeatMode.next
     }
 
+    /// 再生 / 一時停止をトグルする。
+    ///
+    /// セットアップ中（`isPreparingItem`）は操作を受け付けない。再生エンジンの操作は Proxy へ委譲する。
+    public func togglePlayPause() {
+        guard !isPreparingItem else { return }
+        if isPlaying {
+            playerProxy.pause()
+            isPlaying = false
+        } else {
+            playerProxy.play()
+            isPlaying = true
+        }
+    }
+
     // MARK: - Private
 
     /// 1 動画の再生終了で呼ばれる。リピート / 順序に応じて次へ遷移し、末尾なら停止する。
@@ -160,6 +185,7 @@ public final class PlaylistStore {
             await play(orderPosition: next)
         } else {
             playerProxy.pause()
+            isPlaying = false
         }
     }
 
@@ -221,6 +247,13 @@ public final class PlaylistStore {
         let playlistIndex = order[position]
         guard playlist.indices.contains(playlistIndex) else { return }
         orderPosition = position
-        _ = await playerProxy.loadAndPlay(playlist[playlistIndex].id)
+        // PlayerItem のセットアップ（読み込み完了まで）中はコントロールを非活性化させる。
+        isPreparingItem = true
+        let didPlay = await playerProxy.loadAndPlay(playlist[playlistIndex].id)
+        isPreparingItem = false
+        // 読み込みに成功したものは再生開始状態（loadAndPlay は再生まで行う）。
+        if didPlay {
+            isPlaying = true
+        }
     }
 }

@@ -31,10 +31,23 @@ struct CustomVideoPlayer: View {
 
     @Environment(\.videoPlayerProxy) private var playerProxy
 
+    /// SwiftUI Preview 実行中かどうか。Preview では再生エンジンが動作しないためモックアップ UI を表示する。
+    @Environment(\.isPreview) private var isPreview
+
     /// PIP（自動起動を含む）を有効化するか。バックグラウンド再生（F-3）の中核。
     var isPictureInPictureEnabled: Bool = true
 
     var body: some View {
+        // Preview では AVPlayerLayer の描画ができないため、再生面を模したモックアップ UI に差し替える。
+        if isPreview {
+            CustomVideoPlayerMockup()
+        } else {
+            playerSurface
+        }
+    }
+
+    @ViewBuilder
+    private var playerSurface: some View {
         #if canImport(UIKit)
         PlayerViewControllerRepresentable(
             attachPlayerLayer: playerProxy.attachPlayerLayer,
@@ -45,6 +58,19 @@ struct CustomVideoPlayer: View {
         // macOS（テストランナー）向けフォールバック。再生対象は iOS のみ。
         Color.black
         #endif
+    }
+}
+
+/// Preview 用の再生面モックアップ。実際の再生エンジンを使わず、再生ビューの見た目だけを再現する。
+private struct CustomVideoPlayerMockup: View {
+
+    var body: some View {
+        ZStack {
+            Color.black
+            Image(systemName: "film")
+                .font(.system(size: 64))
+                .foregroundStyle(.white.opacity(0.4))
+        }
     }
 }
 
