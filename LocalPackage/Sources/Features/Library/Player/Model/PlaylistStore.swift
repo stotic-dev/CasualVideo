@@ -44,6 +44,9 @@ final class PlaylistStore {
     ///
     /// 再生エンジンの定期時刻監視（`VideoPlayerProxy.observeProgress`）を購読して更新する。
     private(set) var progress = PlaybackProgress()
+    
+    /// エラーが発生した時に設定される
+    private(set) var error: ErrorAlertItem?
 
     private let playerProxy: VideoPlayerProxy
 
@@ -283,6 +286,9 @@ final class PlaylistStore {
         // 読み込みに成功したものは再生開始状態（loadAndPlay は再生まで行う）。
         if didPlay {
             isPlaying = true
+        } else {
+            // 読み込みに失敗したらエラーに倒す
+            error = .init(error: AppDomainError.failedLoadVideo)
         }
     }
 }

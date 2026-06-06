@@ -1,0 +1,37 @@
+{
+  "configurations" : [
+    {
+      "id" : "4F14DA0B-32ED-4FE4-B460-3E922715AAFA",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "performanceAntipatternCheckerEnabled" : true,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:CasualVideo.xcodeproj",
+      "identifier" : "044049822FCA7D2D00C143D1",
+      "name" : "CasualVideo"
+    }
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:LocalPackage",
+        "identifier" : "LibraryTests",
+        "name" : "LibraryTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:LocalPackage",
+        "identifier" : "CoreTests",
+        "name" : "CoreTests"
+      }
+    }
+  ],
+  "version" : 1
+}
