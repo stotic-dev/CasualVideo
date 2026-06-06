@@ -13,6 +13,7 @@
 /* Begin PBXFileReference section */
 		044049832FCA7D2D00C143D1 /* CasualVideo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CasualVideo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		044049C62FCA7F8900C143D1 /* LocalPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = LocalPackage; sourceTree = "<group>"; };
+		04963A082FD3FAA7004F24B1 /* CasualVideo.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = CasualVideo.xctestplan; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -51,6 +52,7 @@
 		0440497A2FCA7D2D00C143D1 = {
 			isa = PBXGroup;
 			children = (
+				04963A082FD3FAA7004F24B1 /* CasualVideo.xctestplan */,
 				044049852FCA7D2D00C143D1 /* CasualVideo */,
 				044049C62FCA7F8900C143D1 /* LocalPackage */,
 				044049C92FCA867400C143D1 /* Frameworks */,
@@ -276,8 +278,9 @@
 		044049A52FCA7D2F00C143D1 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = CasualVideoIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 56LYVN6DMF;
@@ -324,8 +327,9 @@
 		044049A62FCA7D2F00C143D1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = CasualVideoIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 56LYVN6DMF;

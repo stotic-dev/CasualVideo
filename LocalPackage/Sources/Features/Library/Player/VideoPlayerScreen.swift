@@ -26,8 +26,8 @@ public struct VideoPlayerScreen: View {
     let startIndex: Int
 
     @Environment(\.videoPlayerProxy) private var playerProxy
-    
     @Environment(\.nowPlayingInfoProxy) private var nowPlayingInfoProxy
+    @Environment(\.dismiss) var dismiss
 
     /// 再生リソースの読み込み状態（描画面のバインドは Proxy 経由で行うため、状態は進行のみを表す）。
     @State private var state: VideoPlayerViewState = .loading
@@ -38,6 +38,8 @@ public struct VideoPlayerScreen: View {
     /// 再生コントロールの表示・非表示と自動非表示タイマーを管理するドメインモデル。
     /// 表示制御ロジックは View に持たせず、このモデルへ委譲する。
     @State private var controlsVisibility = PlaybackControlsVisibility()
+    
+    @State var errorAlertStore = ErrorAlertStore()
 
     public init(playlist: [VideoAsset], startIndex: Int = 0) {
         self.playlist = playlist
@@ -50,6 +52,12 @@ public struct VideoPlayerScreen: View {
             .task {
                 // ライフサイクルに紐づく副作用（読み込み・連続再生開始）は Screen 側に置く。
                 await onAppear()
+            }
+            .onChange(of: playlistStore?.error) { _, newValue in
+                onError(newValue)
+            }
+            .errorAlert(errorAlertStore) {
+                onDismiss()
             }
     }
 
@@ -116,6 +124,15 @@ private extension VideoPlayerScreen {
             controlsVisibility.show()
         }
     }
+    
+    func onError(_ error: ErrorAlertItem?) {
+        guard let error = error else { return }
+        errorAlertStore.setItem(error)
+    }
+    
+    func onDismiss() {
+        dismiss()
+    }
 }
 
 /// 再生画面の presentational View。init で受け取った状態・操作クロージャを表示するだけで副作用を持たない。
@@ -175,7 +192,7 @@ struct VideoPlayerView: View {
                     }
                 }
                 .overlay(alignment: .bottom) {
-                    if totalCount > 1, areControlsVisible {
+                    if totalCount >= 1, areControlsVisible {
                         PlayerControlsContent(
                             progress: progress,
                             playbackOrder: playbackOrder,
