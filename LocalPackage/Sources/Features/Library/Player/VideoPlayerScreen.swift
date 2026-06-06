@@ -170,7 +170,7 @@ struct VideoPlayerView: View {
                     }
                 }
                 .overlay(alignment: .bottom) {
-                    if totalCount > 1, areControlsVisible {
+                    if totalCount >= 1, areControlsVisible {
                         PlayerControlsContent(
                             progress: progress,
                             playbackOrder: playbackOrder,
