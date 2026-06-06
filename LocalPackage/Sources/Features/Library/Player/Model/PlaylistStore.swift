@@ -86,6 +86,8 @@ final class PlaylistStore {
 
     /// 現在再生中の動画。
     var currentAsset: VideoAsset? {
+        // エラーがある場合は現在再生できていないということになるので、nilを返す
+        if error != nil { return nil }
         guard let currentIndex, playlist.indices.contains(currentIndex) else { return nil }
         return playlist[currentIndex]
     }
