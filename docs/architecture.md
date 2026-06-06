@@ -89,6 +89,27 @@ extension VideoPlayerProxy {
 - **Infra Client 同士を依存させない。** 1 つの Client が別の Client を生成・保持しない（例: AVPlayer の Client が PhotoKit の Client を持たない）。別々のプロセス外依存は疎結合に保つ。
 - **複数の Infra を組み合わせた処理（オーケストレーション）は Infra に置かない。** その組み立ては `App` の assemble 層が担う（後述）。
 
+#### フレームワーク型（再生エンジン等）の隔離（重要）
+
+**プロセス外依存を表すフレームワークの型は、その型を直接生成・保持・操作する実装ごと Infra Client に隔離する。** `Features` / `Core` のロジックや View からこれらの型を直接参照・操作しないこと。
+
+- 隔離対象の例（AVFoundation / AVKit / システム機能の窓口）:
+  - `AVPlayer` / `AVPlayerItem`（再生エンジン）→ `VideoPlayerClient`
+  - `AVPictureInPictureController`（PIP）→ `PictureInPictureClient`
+  - `AVAudioSession`（オーディオセッション）→ `AudioSessionClient`
+  - 同様に、`PHAsset` 等の PhotoKit 型、永続化・ネットワーク等のフレームワーク型も Infra Client に閉じる。
+- **View / Features / Core は、これらの型を直接触らず `Core` の Proxy（struct + クロージャ）経由で操作する。** 操作（再生・停止・PIP 構成など）は Proxy のメソッドで行い、生のフレームワーク型を取り回さない。
+- **複数のフレームワーク型をまたぐ手順は `App` の assemble 層（`.live`）でオーケストレーションする。** 各 Infra Client は単一責務に保つ（例: 「player を layer にバインド → その layer で PIP を構成」は `VideoPlayerProxy.live` が `VideoPlayerClient` と `PictureInPictureClient` を組み合わせて組み立てる）。
+
+##### 唯一の例外: 描画サーフェスの所有
+
+UIKit/SwiftUI の都合で **View が所有せざるを得ない「描画サーフェス」型に限り**、View 層が保持してよい。
+
+- 例: `AVPlayerLayer` は `UIView.layerClass` のバッキングレイヤーとして View が所有する（レイアウト追従のため）。これは「再生エンジンの描画面」であり、View の関心事のため例外的に許容する。
+- ただし **その描画サーフェスへの操作（player のバインド・PIP コントローラ生成など）は View で行わず、Proxy に渡して Infra に委譲する。** View は「自分が所有するサーフェスを Proxy に引き渡す」だけに留める。
+  - 例: `PlayerViewController` は所有する `AVPlayerLayer` を `videoPlayerProxy.attachPlayerLayer(_:)` に渡すのみ。`AVPlayer` のバインドと `AVPictureInPictureController` の生成は Proxy → Infra 側が担う。
+- 逆に、`AVPlayer` や `AVPictureInPictureController` のような「エンジン／コントローラ」型を View が直接生成・保持・操作するのは **禁止**（描画サーフェスの例外には含めない）。
+
 ## DI と抽象化の方針
 
 ### 抽象化は protocol ではなく struct
