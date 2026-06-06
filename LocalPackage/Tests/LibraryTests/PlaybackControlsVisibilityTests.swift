@@ -1,6 +1,6 @@
 //
 //  PlaybackControlsVisibilityTests.swift
-//  CoreTests
+//  LibraryTests
 //
 //  PlaybackControlsVisibility（再生コントロールの表示・非表示ドメインモデル）の振る舞いを検証する。
 //
@@ -10,7 +10,7 @@
 
 import Testing
 
-@testable import Core
+@testable import Library
 
 @MainActor
 struct PlaybackControlsVisibilityTests {
@@ -164,6 +164,10 @@ private final class SleepGate: @unchecked Sendable {
     private var cancelled = false
 
     func wait() async throws {
+        // 本番の Task.sleep と同様、解放済み判定よりもキャンセルを優先する。
+        // （show() の張り直しでキャンセルされたタスクが、後から release() された
+        //   ゲートを見て正常完了してしまう競合を防ぐ。）
+        try Task.checkCancellation()
         if released { return }
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in

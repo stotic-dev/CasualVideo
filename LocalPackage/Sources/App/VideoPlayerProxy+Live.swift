@@ -57,7 +57,15 @@ extension VideoPlayerProxy {
             // バックグラウンド再生・PIP（F-3）のためのオーディオセッション設定を Infra へ委譲。
             prepareForBackgroundPlayback: { audioSession.activatePlayback() },
             // プレイリスト連続再生（F-4）のための再生完了購読を Infra へ委譲。
-            observeDidPlayToEnd: { playerClient.observeDidPlayToEnd($0) }
+            observeDidPlayToEnd: { playerClient.observeDidPlayToEnd($0) },
+            // シークバー操作（F-6）のシークを AVPlayer 窓口へ委譲。
+            seek: { playerClient.seek(to: $0) },
+            // シークバー表示（F-6）のための再生時刻監視を Infra へ委譲し、ドメイン型へ詰め替える。
+            observeProgress: { handler in
+                playerClient.observeTime { currentTime, duration in
+                    handler(PlaybackProgress(currentTime: currentTime, duration: duration))
+                }
+            }
         )
     }
 }

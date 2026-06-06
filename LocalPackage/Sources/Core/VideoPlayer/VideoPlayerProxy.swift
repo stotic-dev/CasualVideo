@@ -59,6 +59,14 @@ public struct VideoPlayerProxy: Sendable {
     /// 操作（購読登録）はメインアクター上で行う。
     public var observeDidPlayToEnd: @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void
 
+    /// 指定秒へシークする（シークバー操作 / F-6）。
+    public var seek: @MainActor @Sendable (_ seconds: TimeInterval) -> Void
+
+    /// 再生進捗（現在位置・総再生時間）を一定間隔で購読する。更新のたびにハンドラが呼ばれる。
+    ///
+    /// シークバーの位置・長さ表示（F-6）の起点。再生エンジンの時刻監視は `Infra` に隔離する。
+    public var observeProgress: @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable (PlaybackProgress) -> Void) -> Void
+
     public init(
         player: @escaping @MainActor @Sendable () -> AVPlayer? = { nil },
         attachPlayerLayer: @escaping @MainActor @Sendable (AVPlayerLayer) -> Void = { _ in },
@@ -68,7 +76,9 @@ public struct VideoPlayerProxy: Sendable {
         pause: @escaping @MainActor @Sendable () -> Void = {},
         setMuted: @escaping @MainActor @Sendable (_ muted: Bool) -> Void = { _ in },
         prepareForBackgroundPlayback: @escaping @MainActor @Sendable () -> Void = {},
-        observeDidPlayToEnd: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in }
+        observeDidPlayToEnd: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in },
+        seek: @escaping @MainActor @Sendable (_ seconds: TimeInterval) -> Void = { _ in },
+        observeProgress: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable (PlaybackProgress) -> Void) -> Void = { _ in }
     ) {
         self.player = player
         self.attachPlayerLayer = attachPlayerLayer
@@ -79,5 +89,7 @@ public struct VideoPlayerProxy: Sendable {
         self.setMuted = setMuted
         self.prepareForBackgroundPlayback = prepareForBackgroundPlayback
         self.observeDidPlayToEnd = observeDidPlayToEnd
+        self.seek = seek
+        self.observeProgress = observeProgress
     }
 }

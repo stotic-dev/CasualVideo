@@ -66,12 +66,26 @@ extension VideoPlayerProxy {
 - Feature の粒度でモジュールを切り分ける。
 - 画面（View）と、その Feature 特有のビジネスロジックを含む。
 - 横断的に使う定義（他 Feature や App と共有するもの）は持たず、`Core` を参照する。
+- **その Feature 内でしか参照しないモデル（ドメインモデル・Store・値型など）は Feature 内に置く。**`Core` には上げない（後述「配置スコープ最小化の原則」）。
 
 ### Core
 
 - モジュール間をまたぐ定義を含む。
 - 例: `Repository` の型定義（`App` でも `Features` でも参照するため `Core` に置く）。後述の通り protocol ではなく **struct** で定義する。
 - ドメインモデル、および UseCase（複数 Feature のプレゼンテーションロジックで重複する部分のファサード）を含む。
+- **`Core` に置くのは「実際にモジュールをまたいで参照される」定義に限る。** 単一 Feature 内で完結するものを `Core` に置かない（後述「配置スコープ最小化の原則」）。
+
+### 配置スコープ最小化の原則（重要）
+
+**モデルは「実際に参照される最小のスコープ」に置く。`Core` は共有のための置き場であって、デフォルトの置き場ではない。**
+
+- ドメインモデル・Store・値型などを実装するときは、まず **その Feature 内に閉じられないか** を検討する。単一 Feature でしか使わないものは、その `Features/<Feature>` 内に置きカプセル化する。
+- **「いつか他でも使うかも」で先回りして `Core` に上げない。** 実際に 2 つ目の参照元（別 Feature や App）が現れた時点で初めて `Core` へ引き上げる。
+- 理由:
+  - **不要なスコープ拡大を防ぐ。** `Core` に置くと全モジュールから参照可能になり、本来 Feature 内の実装詳細だったものが公開 API（`public`）化してしまう。変更の影響範囲が無用に広がる。
+  - **モジュール境界でカプセル化が効く。** Feature 内に閉じておけば `internal` で隠蔽でき、その Feature の関心事として凝集が保たれる。
+- 判断基準: **「App もしくは複数の Feature から参照されるか？」が Yes のものだけを `Core` に置く。**それ以外は Feature 内（あるいは Infra 内）に留める。
+  - 例: `PlaylistStore` / `PlaybackControlsVisibility` などプレイヤー画面でのみ使う Store は `Features/Library` 内に置く。`VideoAsset` や `Repository` 型のように App・複数 Feature から参照されるものは `Core` に置く。
 
 ### Infra
 

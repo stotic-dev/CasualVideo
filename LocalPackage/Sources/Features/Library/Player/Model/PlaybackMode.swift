@@ -1,6 +1,6 @@
 //
 //  PlaybackMode.swift
-//  Core
+//  Library
 //
 //  プレイリストの再生モード（F-5: シャッフル / リピート）を表すドメイン型。
 //
@@ -11,7 +11,7 @@ import Foundation
 ///
 /// 「連続（順番どおり）」「シャッフル（ランダムな順序）」を切り替える。
 /// リピートの有無は `RepeatMode` で直交して扱う。
-public enum PlaybackOrder: Sendable, Hashable, CaseIterable {
+enum PlaybackOrder: Sendable, Hashable, CaseIterable {
 
     /// プレイリストの並び順どおりに再生する（F-4 の既定）。
     case sequential
@@ -21,7 +21,7 @@ public enum PlaybackOrder: Sendable, Hashable, CaseIterable {
 }
 
 /// プレイリストのリピートモード（F-5 / requirements 3.2）。
-public enum RepeatMode: Sendable, Hashable, CaseIterable {
+enum RepeatMode: Sendable, Hashable, CaseIterable {
 
     /// リピートしない。末尾まで再生したら停止する。
     case off
@@ -33,7 +33,7 @@ public enum RepeatMode: Sendable, Hashable, CaseIterable {
     case one
 
     /// トグル操作用に次のリピートモード（off → all → one → off）を返す。
-    public var next: RepeatMode {
+    var next: RepeatMode {
         switch self {
         case .off: .all
         case .all: .one

@@ -1,6 +1,6 @@
 //
 //  PlaylistStoreTests.swift
-//  CoreTests
+//  LibraryTests
 //
 //  PlaylistStore（プレイリスト連続再生 F-4）のロジックを検証する。
 //
@@ -9,9 +9,10 @@
 //  「現在位置の遷移」「再生完了での自動遷移」「境界での停止」などのドメインロジックを検証する。
 //
 
+import Core
 import Testing
 
-@testable import Core
+@testable import Library
 
 @MainActor
 struct PlaylistStoreTests {

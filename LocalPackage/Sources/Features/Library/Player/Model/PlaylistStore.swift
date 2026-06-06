@@ -1,12 +1,13 @@
 //
 //  PlaylistStore.swift
-//  Core
+//  Library
 //
 //  プレイリスト連続再生（F-4）＋ シャッフル / リピート（F-5）のドメイン状態と再生制御を担う Store。
 //
 
 import Foundation
 import Observation
+import Core
 
 /// プレイリストの連続再生・シャッフル・リピートを管理する Store。
 ///
@@ -17,27 +18,32 @@ import Observation
 /// - Note: 特定画面に依存しないドメイン状態のみを持つ（UI 型は扱わない）。再生操作は抽象（`VideoPlayerProxy`）へ委譲する。
 @Observable
 @MainActor
-public final class PlaylistStore {
+final class PlaylistStore {
 
     /// 連続再生対象の動画一覧（プレイリストの並び順そのもの）。
-    public private(set) var playlist: [VideoAsset] = []
+    private(set) var playlist: [VideoAsset] = []
 
     /// 再生順序モード（連続 / シャッフル）。
-    public private(set) var playbackOrder: PlaybackOrder
+    private(set) var playbackOrder: PlaybackOrder
 
     /// リピートモード（off / all / one）。
-    public private(set) var repeatMode: RepeatMode
+    private(set) var repeatMode: RepeatMode
 
     /// 現在再生中かどうか（再生 = true / 一時停止 = false）。
     ///
     /// 再生/一時停止ボタンの表示状態に用いる。再生エンジンへの操作は `VideoPlayerProxy` 経由で行う。
-    public private(set) var isPlaying = false
+    private(set) var isPlaying = false
 
     /// 再生アイテム（PlayerItem）をセットアップ中かどうか。
     ///
     /// `loadAndPlay`（読み込み完了まで await）が進行している間 true。
     /// この間は再生コントロールを非活性化しインジケーターを表示する（UI 側の判断材料）。
-    public private(set) var isPreparingItem = false
+    private(set) var isPreparingItem = false
+
+    /// 現在再生中アイテムの再生進捗（シークバー表示 / F-6 に用いる）。
+    ///
+    /// 再生エンジンの定期時刻監視（`VideoPlayerProxy.observeProgress`）を購読して更新する。
+    private(set) var progress = PlaybackProgress()
 
     private let playerProxy: VideoPlayerProxy
 
@@ -50,7 +56,10 @@ public final class PlaylistStore {
     /// 再生完了オブザーバを一度だけ登録したかどうか。
     private var hasObservedDidPlayToEnd = false
 
-    public init(
+    /// 再生進捗オブザーバを一度だけ登録したかどうか。
+    private var hasObservedProgress = false
+
+    init(
         playerProxy: VideoPlayerProxy,
         playbackOrder: PlaybackOrder = .sequential,
         repeatMode: RepeatMode = .off
@@ -61,36 +70,36 @@ public final class PlaylistStore {
     }
 
     /// 現在再生中の動画のインデックス（`playlist` 上の位置）。未再生時は `nil`。
-    public var currentIndex: Int? {
+    var currentIndex: Int? {
         guard let orderPosition, order.indices.contains(orderPosition) else { return nil }
         return order[orderPosition]
     }
 
     /// 現在再生中の動画。
-    public var currentAsset: VideoAsset? {
+    var currentAsset: VideoAsset? {
         guard let currentIndex, playlist.indices.contains(currentIndex) else { return nil }
         return playlist[currentIndex]
     }
 
     /// 現在の再生位置（再生順での 1 始まり）。未再生時は `nil`。
-    public var currentPosition: Int? {
+    var currentPosition: Int? {
         orderPosition.map { $0 + 1 }
     }
 
     /// プレイリスト内の総数。
-    public var totalCount: Int {
+    var totalCount: Int {
         playlist.count
     }
 
     /// 次の動画へ進めるか。リピート時（all / one）は要素があれば常に進める（末尾でも先頭へ戻る）。
-    public var canPlayNext: Bool {
+    var canPlayNext: Bool {
         guard let orderPosition else { return false }
         if repeatMode != .off { return !order.isEmpty }
         return orderPosition + 1 < order.count
     }
 
     /// 前の動画へ戻れるか。リピート時（all / one）は要素があれば常に戻れる（先頭でも末尾へ回る）。
-    public var canPlayPrevious: Bool {
+    var canPlayPrevious: Bool {
         guard let orderPosition else { return false }
         if repeatMode != .off { return !order.isEmpty }
         return orderPosition - 1 >= 0
@@ -101,23 +110,24 @@ public final class PlaylistStore {
     /// - Parameters:
     ///   - assets: 再生対象の動画一覧。
     ///   - startIndex: 再生を開始する `playlist` 上のインデックス（既定は先頭）。
-    public func start(playlist assets: [VideoAsset], from startIndex: Int = 0) async {
+    func start(playlist assets: [VideoAsset], from startIndex: Int = 0) async {
         guard !assets.isEmpty else { return }
         playlist = assets
         registerDidPlayToEndIfNeeded()
+        registerProgressObserverIfNeeded()
         let index = assets.indices.contains(startIndex) ? startIndex : 0
         let position = rebuildOrder(startingFrom: index)
         await play(orderPosition: position)
     }
 
     /// 次の動画へ手動で進める。リピート時は末尾から先頭へ回る。
-    public func playNext() async {
+    func playNext() async {
         guard let next = nextOrderPosition(wrapping: repeatMode != .off) else { return }
         await play(orderPosition: next)
     }
 
     /// 前の動画へ手動で戻る。リピート時は先頭から末尾へ回る。
-    public func playPrevious() async {
+    func playPrevious() async {
         guard let orderPosition, !order.isEmpty else { return }
         let previous: Int
         if orderPosition - 1 >= 0 {
@@ -133,7 +143,7 @@ public final class PlaylistStore {
     /// 再生順序モード（連続 / シャッフル）を設定する。
     ///
     /// 現在再生中の動画は維持したまま、以降の順序を再構築する。
-    public func setPlaybackOrder(_ newOrder: PlaybackOrder) {
+    func setPlaybackOrder(_ newOrder: PlaybackOrder) {
         guard newOrder != playbackOrder else { return }
         playbackOrder = newOrder
         let position = rebuildOrder(startingFrom: currentIndex)
@@ -143,24 +153,24 @@ public final class PlaylistStore {
     }
 
     /// 連続 ↔ シャッフルをトグルする。
-    public func toggleShuffle() {
+    func toggleShuffle() {
         setPlaybackOrder(playbackOrder == .shuffle ? .sequential : .shuffle)
     }
 
     /// リピートモードを設定する。
-    public func setRepeatMode(_ mode: RepeatMode) {
+    func setRepeatMode(_ mode: RepeatMode) {
         repeatMode = mode
     }
 
     /// リピートモードを循環的に切り替える（off → all → one → off）。
-    public func cycleRepeatMode() {
+    func cycleRepeatMode() {
         repeatMode = repeatMode.next
     }
 
     /// 再生 / 一時停止をトグルする。
     ///
     /// セットアップ中（`isPreparingItem`）は操作を受け付けない。再生エンジンの操作は Proxy へ委譲する。
-    public func togglePlayPause() {
+    func togglePlayPause() {
         guard !isPreparingItem else { return }
         if isPlaying {
             playerProxy.pause()
@@ -169,6 +179,17 @@ public final class PlaylistStore {
             playerProxy.play()
             isPlaying = true
         }
+    }
+
+    /// 指定秒へシークする（シークバー操作 / F-6）。
+    ///
+    /// セットアップ中（`isPreparingItem`）は受け付けない。シーク可能な長さが無い場合も無視する。
+    /// 表示の追従性のため、進捗監視の更新を待たずに `progress.currentTime` を即時反映する。
+    func seek(to seconds: TimeInterval) {
+        guard !isPreparingItem, progress.isSeekable else { return }
+        let clamped = min(max(seconds, 0), progress.duration)
+        playerProxy.seek(clamped)
+        progress.currentTime = clamped
     }
 
     // MARK: - Private
@@ -239,6 +260,14 @@ public final class PlaylistStore {
             Task { @MainActor [weak self] in
                 await self?.handleDidPlayToEnd()
             }
+        }
+    }
+
+    private func registerProgressObserverIfNeeded() {
+        guard !hasObservedProgress else { return }
+        hasObservedProgress = true
+        playerProxy.observeProgress { [weak self] progress in
+            self?.progress = progress
         }
     }
 

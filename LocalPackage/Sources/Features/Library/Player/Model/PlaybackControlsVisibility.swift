@@ -1,6 +1,6 @@
 //
 //  PlaybackControlsVisibility.swift
-//  Core
+//  Library
 //
 //  再生コントロール（playbackControls）の表示・非表示状態と、その自動非表示ロジックを担うドメインモデル。
 //
@@ -17,10 +17,10 @@ import Observation
 ///   SwiftUI の型は扱わず、`Bool` の表示状態と操作 API のみを公開する。
 @Observable
 @MainActor
-public final class PlaybackControlsVisibility {
+final class PlaybackControlsVisibility {
 
     /// コントロールを表示中かどうか。
-    public private(set) var isVisible = false
+    private(set) var isVisible = false
 
     /// 表示状態になってから自動で非表示にするまでの時間（秒）。
     private let autoHideDelay: Duration
@@ -34,7 +34,7 @@ public final class PlaybackControlsVisibility {
     /// - Parameters:
     ///   - autoHideDelay: 表示してから自動で非表示にするまでの時間（既定 8 秒）。
     ///   - sleep: 自動非表示のための待機処理（既定は `Task.sleep`）。
-    public init(
+    init(
         autoHideDelay: Duration = .seconds(8),
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
@@ -45,7 +45,7 @@ public final class PlaybackControlsVisibility {
     /// 表示・非表示をトグルする（画面タップ時に呼ぶ）。
     ///
     /// 表示へ切り替えた場合は自動非表示タイマーを開始し、非表示へ切り替えた場合はタイマーを止める。
-    public func toggle() {
+    func toggle() {
         if isVisible {
             hide()
         } else {
@@ -56,13 +56,13 @@ public final class PlaybackControlsVisibility {
     /// コントロールを表示し、自動非表示タイマーを開始する。
     ///
     /// 再生準備完了（state が .ready）になったタイミングなど、明示的に表示したい場合に呼ぶ。
-    public func show() {
+    func show() {
         isVisible = true
         scheduleAutoHide()
     }
 
     /// コントロールを非表示にし、自動非表示タイマーを止める。
-    public func hide() {
+    func hide() {
         autoHideTask?.cancel()
         autoHideTask = nil
         isVisible = false

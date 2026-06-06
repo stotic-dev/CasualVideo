@@ -30,6 +30,9 @@ public final class VideoPlayerClient {
     /// 再生完了時に呼び出すハンドラ（プレイリストの自動遷移に使う / F-4）。
     private var didPlayToEndHandler: (() -> Void)?
 
+    /// 定期的な再生時刻監視の購読トークン（シークバー更新 / F-6）。
+    private var periodicTimeObserver: Any?
+
     public nonisolated init() {}
 
     /// 再生アイテムを差し替える。差し替えたアイテムの再生完了通知を購読し直す。
@@ -72,7 +75,40 @@ public final class VideoPlayerClient {
         didPlayToEndHandler = handler
     }
 
+    /// 指定秒へシークする。シークバー操作（F-6）からの再生位置変更に用いる。
+    public func seek(to seconds: TimeInterval) {
+        let time = CMTime(seconds: seconds, preferredTimescale: 600)
+        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
+    /// 再生時刻を一定間隔で購読する。更新のたびに「現在位置（秒）・総再生時間（秒）」を `handler` へ渡す。
+    ///
+    /// シークバーの位置・長さ表示（F-6）の起点となる。総再生時間が未確定なら 0 を渡す。
+    public func observeTime(
+        interval: TimeInterval = 0.5,
+        handler: @escaping @MainActor @Sendable (_ currentTime: TimeInterval, _ duration: TimeInterval) -> Void
+    ) {
+        removePeriodicTimeObserver()
+        let observerInterval = CMTime(seconds: interval, preferredTimescale: 600)
+        periodicTimeObserver = player.addPeriodicTimeObserver(
+            forInterval: observerInterval,
+            queue: .main
+        ) { [weak self] time in
+            MainActor.assumeIsolated {
+                let duration = self?.player.currentItem?.duration.seconds ?? 0
+                let validDuration = (duration.isFinite ? duration : 0)
+                handler(time.seconds, validDuration)
+            }
+        }
+    }
+
     // MARK: - Private
+
+    private func removePeriodicTimeObserver() {
+        guard let periodicTimeObserver else { return }
+        player.removeTimeObserver(periodicTimeObserver)
+        self.periodicTimeObserver = nil
+    }
 
     private func removeDidPlayToEndObserver() {
         guard let didPlayToEndObserver else { return }
