@@ -36,6 +36,30 @@ ApplicationTarget ──> App ──┬──> Features/<Feature> ──> Core
 - すべての依存を **assemble（組み立て）** するモジュール。
 - `Repository` などの依存を `Impl` オブジェクトとして実装し、`Environment` に DI する。
 - `Infra` モジュールへの参照を持ち、それを用いて `Repository` の `Impl` を実装する。
+- **複数の Infra をまたぐオーケストレーション（取得 → 変換 → 別 Infra へ受け渡し、等）はこの `.live`（Impl）ファクトリで組み立てる。** これにより各 Infra Client は単一責務に保たれ、組み合わせの都合は assemble 層に集約される。
+
+```swift
+// App: 複数 Infra を組み合わせて Impl を構築する例
+extension VideoPlayerProxy {
+    static func live(
+        playerClient: VideoPlayerClient,        // AVPlayer の窓口
+        photoLibraryClient: PhotoLibraryClient  // PhotoKit の窓口
+    ) -> VideoPlayerProxy {
+        VideoPlayerProxy(
+            // 「取得（PhotoKit）→ 差し替え → 再生」という複数 Infra をまたぐ手順はここで組み立てる。
+            loadAndPlay: { id in
+                guard let item = await photoLibraryClient.loadPlayerItem(localIdentifier: id) else { return false }
+                await playerClient.replaceCurrentItem(item)
+                await playerClient.play()
+                return true
+            }
+            // ...
+        )
+    }
+}
+```
+
+> 補足: orchestration が複雑化し、独立したテストが必要になった場合は、`Infra` と `App` の間に専用の Data 層（DataSource=Infra / Repository=Data）を切り出す選択肢もある。ただし現状はこの assemble 方式を既定とする。
 
 ### Features/\<Feature\>
 
@@ -54,6 +78,16 @@ ApplicationTarget ──> App ──┬──> Features/<Feature> ──> Core
 - リモートデータソース・ローカルデータソースなど、**プロセス外依存と直接やりとりする**オブジェクトを含む。
 - プロセス外依存の **唯一の情報源（single source of truth）** を管理する。
 - `App` がこれを参照して `Repository` の `Impl` を実装する。
+
+#### Infra Client の責務境界（重要）
+
+各 Infra Client は **1 つのプロセス外依存に対する単一責務**に閉じる。次を守ること:
+
+- **Client は「使う側（消費側）の都合」を持ち込まない。** 単純なコマンド／クエリの API だけを公開する。
+  - 例: AVPlayer の Client は `replaceCurrentItem(_:)` / `play()` を公開するだけ。「どの動画を再生するか（`localIdentifier` 等）」「取得してから差し替えて再生する」といった**使う側の手順**は持たない。
+  - 理由: 使う側を意識した API を Infra に置くと、仕様変更時の影響が Infra まで波及し、変更範囲が広がる。
+- **Infra Client 同士を依存させない。** 1 つの Client が別の Client を生成・保持しない（例: AVPlayer の Client が PhotoKit の Client を持たない）。別々のプロセス外依存は疎結合に保つ。
+- **複数の Infra を組み合わせた処理（オーケストレーション）は Infra に置かない。** その組み立ては `App` の assemble 層が担う（後述）。
 
 ## DI と抽象化の方針
 

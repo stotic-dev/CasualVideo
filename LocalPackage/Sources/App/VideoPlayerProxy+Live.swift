@@ -2,7 +2,12 @@
 //  VideoPlayerProxy+Live.swift
 //  App
 //
-//  Infra（VideoPlayerClient）を用いて VideoPlayerProxy の本番インスタンスを組み立てる。
+//  複数の Infra Client を組み合わせて VideoPlayerProxy の本番インスタンスを組み立てる。
+//
+//  「どの動画を再生するか（VideoAsset.ID）」という使う側の都合を起点に、
+//  PhotoKit（PhotoLibraryClient）で再生アイテムを取得し、AVPlayer（VideoPlayerClient）へ載せ替える、
+//  という複数 Infra をまたぐオーケストレーションはこの assemble 層が担う。
+//  各 Infra Client 自身は互いを知らず、それぞれの単一責務（PhotoKit / AVPlayer）に閉じる。
 //
 
 import Core
@@ -10,25 +15,40 @@ import Infra
 
 extension VideoPlayerProxy {
 
-    /// AVPlayer 再生エンジン（`VideoPlayerClient`）を用いた本番インスタンス。
+    /// AVPlayer 再生エンジン（`VideoPlayerClient`）と写真ライブラリ（`PhotoLibraryClient`）を
+    /// 組み合わせた本番インスタンス。
     ///
-    /// 操作はすべて Client へ委譲する。`VideoPlayerClient` は `@MainActor` final class（= Sendable）のため、
-    /// Proxy のクロージャから安全に参照できる。
+    /// - Parameters:
+    ///   - playerClient: AVPlayer の操作窓口。アイテムの差し替え・再生制御のみを担う。
+    ///   - photoLibraryClient: PhotoKit の窓口。`VideoAsset.ID` から再生用 `AVPlayerItem` を取得する。
+    ///   - audioSession: バックグラウンド再生・PIP（F-3）用のオーディオセッション窓口。
+    ///
+    /// `VideoPlayerClient` は `@MainActor` final class（= Sendable）、`PhotoLibraryClient` /
+    /// `AudioSessionClient` は値型（Sendable）のため、Proxy のクロージャから安全に参照できる。
     @MainActor
     static func live(
-        client: VideoPlayerClient,
+        playerClient: VideoPlayerClient,
+        photoLibraryClient: PhotoLibraryClient = PhotoLibraryClient(),
         audioSession: AudioSessionClient = AudioSessionClient()
     ) -> VideoPlayerProxy {
         VideoPlayerProxy(
-            player: { client.player },
-            loadAndPlay: { id in await client.loadAndPlay(localIdentifier: id) },
-            play: { client.play() },
-            pause: { client.pause() },
-            setMuted: { client.setMuted($0) },
+            player: { playerClient.player },
+            // 取得（PhotoKit）→ 差し替え → 再生、という複数 Infra をまたぐ手順をここで組み立てる。
+            loadAndPlay: { id in
+                guard let item = await photoLibraryClient.loadPlayerItem(localIdentifier: id) else {
+                    return false
+                }
+                await playerClient.replaceCurrentItem(item)
+                await playerClient.play()
+                return true
+            },
+            play: { playerClient.play() },
+            pause: { playerClient.pause() },
+            setMuted: { playerClient.setMuted($0) },
             // バックグラウンド再生・PIP（F-3）のためのオーディオセッション設定を Infra へ委譲。
             prepareForBackgroundPlayback: { audioSession.activatePlayback() },
             // プレイリスト連続再生（F-4）のための再生完了購読を Infra へ委譲。
-            observeDidPlayToEnd: { client.observeDidPlayToEnd($0) }
+            observeDidPlayToEnd: { playerClient.observeDidPlayToEnd($0) }
         )
     }
 }
