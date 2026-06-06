@@ -26,6 +26,8 @@ public struct VideoPlayerScreen: View {
     let startIndex: Int
 
     @Environment(\.videoPlayerProxy) private var playerProxy
+    
+    @Environment(\.nowPlayingInfoProxy) private var nowPlayingInfoProxy
 
     /// 再生リソースの読み込み状態（描画面のバインドは Proxy 経由で行うため、状態は進行のみを表す）。
     @State private var state: VideoPlayerViewState = .loading
@@ -98,7 +100,10 @@ private extension VideoPlayerScreen {
         // PIP・バックグラウンド再生（F-3）のためのオーディオセッションを再生前に構成する。
         playerProxy.prepareForBackgroundPlayback()
 
-        let store = PlaylistStore(playerProxy: playerProxy)
+        let store = PlaylistStore(
+            playerProxy: playerProxy,
+            nowPlayingInfoProxy: nowPlayingInfoProxy
+        )
         playlistStore = store
         await store.start(playlist: playlist, from: startIndex)
 

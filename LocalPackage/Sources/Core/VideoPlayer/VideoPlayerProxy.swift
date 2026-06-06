@@ -15,6 +15,7 @@
 //
 
 import AVFoundation
+import SwiftUI
 
 /// 動画プレイヤーの操作を抽象化する Proxy。View / Store はこの抽象を介して再生エンジンを操作する。
 public struct VideoPlayerProxy: Sendable {
@@ -78,7 +79,7 @@ public struct VideoPlayerProxy: Sendable {
         prepareForBackgroundPlayback: @escaping @MainActor @Sendable () -> Void = {},
         observeDidPlayToEnd: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in },
         seek: @escaping @MainActor @Sendable (_ seconds: TimeInterval) -> Void = { _ in },
-        observeProgress: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable (PlaybackProgress) -> Void) -> Void = { _ in }
+        observeProgress: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable (PlaybackProgress) -> Void) -> Void = { _ in },
     ) {
         self.player = player
         self.attachPlayerLayer = attachPlayerLayer
@@ -92,4 +93,14 @@ public struct VideoPlayerProxy: Sendable {
         self.seek = seek
         self.observeProgress = observeProgress
     }
+}
+
+extension EnvironmentValues {
+
+    /// 動画プレイヤー Proxy の DI エントリ。
+    ///
+    /// 本番インスタンスは `App` が `Infra` の `VideoPlayerClient` / `PhotoLibraryClient` を
+    /// 組み合わせて構築し、`.environment(\.videoPlayerProxy, .live(playerClient:photoLibraryClient:))` で注入する。
+    /// 未注入時は何もしない（再生不可・操作は no-op）フォールバック。
+    @Entry public var videoPlayerProxy = VideoPlayerProxy()
 }
