@@ -50,9 +50,19 @@ struct VideoLibraryView: View {
                 .navigationTitle("動画")
                 .navigationDestination(for: VideoAsset.self) { asset in
                     // 一覧セルからの遷移先（F-2 再生画面）。
-                    VideoPlayerScreen(asset: asset)
+                    // F-4: 表示中の一覧全体をプレイリストとし、選択動画から連続再生する。
+                    VideoPlayerScreen(
+                        playlist: playlist,
+                        startIndex: playlist.firstIndex(of: asset) ?? 0
+                    )
                 }
         }
+    }
+
+    /// 現在表示中の動画一覧（プレイリストの元になる）。一覧表示中以外は空。
+    private var playlist: [VideoAsset] {
+        if case .videos(let videos) = state { return videos }
+        return []
     }
 
     @ViewBuilder

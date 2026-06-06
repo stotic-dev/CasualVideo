@@ -26,7 +26,9 @@ extension VideoPlayerProxy {
             pause: { client.pause() },
             setMuted: { client.setMuted($0) },
             // バックグラウンド再生・PIP（F-3）のためのオーディオセッション設定を Infra へ委譲。
-            prepareForBackgroundPlayback: { audioSession.activatePlayback() }
+            prepareForBackgroundPlayback: { audioSession.activatePlayback() },
+            // プレイリスト連続再生（F-4）のための再生完了購読を Infra へ委譲。
+            observeDidPlayToEnd: { client.observeDidPlayToEnd($0) }
         )
     }
 }

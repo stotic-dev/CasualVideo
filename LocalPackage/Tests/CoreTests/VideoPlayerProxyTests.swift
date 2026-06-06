@@ -80,6 +80,31 @@ struct VideoPlayerProxyTests {
         #expect(paused.value)
         #expect(muted.value == true)
     }
+
+    // MARK: - observeDidPlayToEnd（F-4 連続再生の自動遷移フック）
+
+    @Test("observeDidPlayToEnd は注入したクロージャへ委譲し、登録ハンドラを引き渡す")
+    func observeDidPlayToEnd_invokesInjectedClosureWithHandler() {
+        let registered = Box<(@MainActor @Sendable () -> Void)?>(nil)
+        let proxy = VideoPlayerProxy(
+            observeDidPlayToEnd: { registered.value = $0 }
+        )
+
+        let fired = Box(false)
+        proxy.observeDidPlayToEnd { fired.value = true }
+
+        // 登録ハンドラが委譲先へ正しく渡り、呼び出すと発火することを確認する。
+        #expect(registered.value != nil)
+        registered.value?()
+        #expect(fired.value)
+    }
+
+    @Test("デフォルトの observeDidPlayToEnd は何もせずクラッシュしない")
+    func observeDidPlayToEnd_defaultIsNoop() {
+        let proxy = VideoPlayerProxy()
+        // デフォルト実装（{ _ in }）にハンドラを渡してもクラッシュしないことを確認する。
+        proxy.observeDidPlayToEnd {}
+    }
 }
 
 // MARK: - Test utility
