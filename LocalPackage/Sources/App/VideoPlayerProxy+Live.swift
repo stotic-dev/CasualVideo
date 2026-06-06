@@ -29,10 +29,19 @@ extension VideoPlayerProxy {
     static func live(
         playerClient: VideoPlayerClient,
         photoLibraryClient: PhotoLibraryClient = PhotoLibraryClient(),
-        audioSession: AudioSessionClient = AudioSessionClient()
+        audioSession: AudioSessionClient = AudioSessionClient(),
+        pictureInPictureClient: PictureInPictureClient = PictureInPictureClient()
     ) -> VideoPlayerProxy {
         VideoPlayerProxy(
             player: { playerClient.player },
+            // 描画レイヤーへの player バインド（VideoPlayerClient）→ その layer で PIP 構成
+            // （PictureInPictureClient）という複数 Infra をまたぐ描画面セットアップをここで組み立てる。
+            attachPlayerLayer: { layer in
+                layer.player = playerClient.player
+                pictureInPictureClient.configure(playerLayer: layer)
+            },
+            // 自動 PIP 起動（F-3）の有効/無効を PIP Client へ委譲。
+            setPictureInPictureEnabled: { pictureInPictureClient.setAutomaticStartEnabled($0) },
             // 取得（PhotoKit）→ 差し替え → 再生、という複数 Infra をまたぐ手順をここで組み立てる。
             loadAndPlay: { id in
                 guard let item = await photoLibraryClient.loadPlayerItem(localIdentifier: id) else {

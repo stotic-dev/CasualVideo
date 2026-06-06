@@ -13,7 +13,6 @@
 //  シャッフル / リピート（F-5）の状態管理は Core の PlaylistStore が担う。
 //
 
-import AVFoundation
 import Core
 import SwiftUI
 
@@ -28,7 +27,7 @@ public struct VideoPlayerScreen: View {
 
     @Environment(\.videoPlayerProxy) private var playerProxy
 
-    /// 再生リソースの表示状態（AVPlayer は View ライフサイクルに紐づくため View 層で保持）。
+    /// 再生リソースの読み込み状態（描画面のバインドは Proxy 経由で行うため、状態は進行のみを表す）。
     @State private var state: VideoPlayerViewState = .loading
 
     /// 連続再生の進行を管理する Store。再生画面のライフサイクルに紐づくため View 層で生成・保持する。
@@ -76,7 +75,7 @@ public struct VideoPlayerScreen: View {
 }
 
 private extension VideoPlayerScreen {
-    /// Store へ連続再生を委譲し、描画用の AVPlayer を受け取って表示状態を更新する。
+    /// Store へ連続再生を委譲し、読み込み状態を更新する。描画面のバインドは CustomVideoPlayer が Proxy 経由で行う。
     func onAppear() async {
         // 既に準備済みなら作り直さない（再表示時の二重ロード防止）。
         if case .ready = state { return }
@@ -92,12 +91,9 @@ private extension VideoPlayerScreen {
         playlistStore = store
         await store.start(playlist: playlist, from: startIndex)
 
-        guard let player = playerProxy.player() else {
-            state = .failed
-            return
-        }
-        // player は描画（AVPlayerLayer へのバインド）にのみ使う。操作は Proxy / Store 経由。
-        state = .ready(player)
+        // 再生開始できたか（=対象アセットが選択できたか）で readiness を判定する。
+        // 描画用の AVPlayer は取り出さず、CustomVideoPlayer が Proxy 経由で描画面を構成する。
+        state = store.currentAsset == nil ? .failed : .ready
     }
 }
 
@@ -131,8 +127,8 @@ struct VideoPlayerView: View {
             ProgressView()
                 .tint(.white)
 
-        case .ready(let player):
-            CustomVideoPlayer(player: player)
+        case .ready:
+            CustomVideoPlayer()
                 .overlay(alignment: .top) {
                     if totalCount > 1, let position {
                         Text("\(position) / \(totalCount)")

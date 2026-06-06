@@ -25,6 +25,16 @@ public struct VideoPlayerProxy: Sendable {
     /// 直接操作しないこと（責務分離・テスタビリティのため）。
     public var player: @MainActor @Sendable () -> AVPlayer?
 
+    /// 描画レイヤーへ player をバインドし、その layer で PIP を構成する（描画面セットアップ）。
+    ///
+    /// `player()` と同じ「描画バインドの境界」として AVPlayerLayer を受け渡す。
+    /// player の layer へのバインド（VideoPlayerClient の責務）と、その layer での PIP 構成
+    /// （PictureInPictureClient の責務）という複数 Infra をまたぐ手順は `App` の `.live` が組み立てる。
+    public var attachPlayerLayer: @MainActor @Sendable (AVPlayerLayer) -> Void
+
+    /// 自動 PIP 起動（F-3）の有効/無効を切り替える。
+    public var setPictureInPictureEnabled: @MainActor @Sendable (Bool) -> Void
+
     /// 指定アセットの動画を読み込み、再生を開始する。読み込み成否を返す。
     public var loadAndPlay: @Sendable (_ id: VideoAsset.ID) async -> Bool
 
@@ -51,6 +61,8 @@ public struct VideoPlayerProxy: Sendable {
 
     public init(
         player: @escaping @MainActor @Sendable () -> AVPlayer? = { nil },
+        attachPlayerLayer: @escaping @MainActor @Sendable (AVPlayerLayer) -> Void = { _ in },
+        setPictureInPictureEnabled: @escaping @MainActor @Sendable (Bool) -> Void = { _ in },
         loadAndPlay: @escaping @Sendable (_ id: VideoAsset.ID) async -> Bool = { _ in false },
         play: @escaping @MainActor @Sendable () -> Void = {},
         pause: @escaping @MainActor @Sendable () -> Void = {},
@@ -59,6 +71,8 @@ public struct VideoPlayerProxy: Sendable {
         observeDidPlayToEnd: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in }
     ) {
         self.player = player
+        self.attachPlayerLayer = attachPlayerLayer
+        self.setPictureInPictureEnabled = setPictureInPictureEnabled
         self.loadAndPlay = loadAndPlay
         self.play = play
         self.pause = pause
