@@ -25,6 +25,9 @@ public struct NowPlayingInfo: Sendable, Hashable {
 
     /// 再生中かどうか（再生レート 1.0 / 0.0 の判断に用いる）。
     public var isPlaying: Bool
+    
+    /// 再生中のレート
+    public var rate: PlaybackRate
 
     /// アートワーク取得の参照に用いる現在アセットの ID（無ければ nil）。
     public var assetID: VideoAsset.ID?
@@ -34,12 +37,14 @@ public struct NowPlayingInfo: Sendable, Hashable {
         duration: TimeInterval,
         elapsedTime: TimeInterval,
         isPlaying: Bool,
+        rate: PlaybackRate,
         assetID: VideoAsset.ID?
     ) {
         self.title = title
         self.duration = duration
         self.elapsedTime = elapsedTime
         self.isPlaying = isPlaying
+        self.rate = rate
         self.assetID = assetID
     }
 }

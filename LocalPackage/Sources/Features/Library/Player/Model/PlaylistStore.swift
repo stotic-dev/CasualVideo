@@ -351,6 +351,7 @@ final class PlaylistStore {
             duration: progress.duration,
             elapsedTime: progress.currentTime,
             isPlaying: isPlaying,
+            rate: playbackRate,
             assetID: currentAsset?.id
         )
         nowPlayingInfoProxy.updateNowPlayingInfo(info)

@@ -35,7 +35,7 @@ extension NowPlayingInfoProxy {
             // 「Now Playing 反映（MediaPlayer）＋ サムネイル取得（PhotoKit）」という複数 Infra をまたぐ
             // 手順をこの assemble 層で組み立てる。各 Infra Client は単一責務に閉じる。
             updateNowPlayingInfo: { info in
-                let rate = info.isPlaying ? 1.0 : 0.0
+                let rate = info.isPlaying ? info.rate.rawValue : 0.0
                 nowPlayingInfoClient.update(
                     title: info.title,
                     duration: info.duration,
