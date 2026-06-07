@@ -47,7 +47,7 @@ App ──┬──> Main ──> Core
 
 逆方向の依存（例: `Core` → `Main`）を作らないこと。
 
-**各レイヤーの責務・DI 方針・状態管理（Store）の詳細は [docs/architecture.md](docs/architecture.md)、テスト方針は [docs/testing.md](docs/testing.md) を必ず参照すること。** 新規実装やレビュー時はこのルールに従う。
+**各レイヤーの責務・DI 方針・状態管理（Store）の詳細は [docs-internal/architecture.md](docs-internal/architecture.md)、テスト方針は [docs-internal/testing.md](docs-internal/testing.md) を必ず参照すること。** 新規実装やレビュー時はこのルールに従う。
 
 ### Package.swift の編集方法
 

@@ -7,7 +7,7 @@
 //  Proxy は AVPlayer 操作を抽象化する struct で、各操作はクロージャへ委譲される。
 //  ここでは「Proxy のメソッド呼び出しが、注入したクロージャへ正しく委譲されること」を検証する。
 //  本番の `.live`（Infra の Client / AudioSession への委譲）は App 層の assemble であり、
-//  テスト対象外（docs/testing.md）。よって Core で型の委譲契約のみを検証する。
+//  テスト対象外（docs-internal/testing.md）。よって Core で型の委譲契約のみを検証する。
 //
 
 import Testing

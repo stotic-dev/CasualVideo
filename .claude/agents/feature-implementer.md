@@ -9,7 +9,7 @@ model: inherit
 
 ## 着手時に必ず読む
 
-ルールの正本である `docs/architecture.md` を Read で読み、その規約を厳守する。
+ルールの正本である `docs-internal/architecture.md` を Read で読み、その規約を厳守する。
 
 ## 厳守する原則
 

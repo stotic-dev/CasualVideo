@@ -4,7 +4,7 @@
 //
 //  一覧から選んだ動画を起点に、一覧全体をプレイリストとして連続再生する再生画面（F-2 / F-4 / F-5）。
 //
-//  Screen と presentational View の分離方針は docs/swiftui.md を参照。
+//  Screen と presentational View の分離方針は docs-internal/swiftui.md を参照。
 //  - Screen（VideoPlayerScreen）: 再生エンジンの操作（VideoPlayerProxy / PlaylistStore 経由）と副作用を担う。
 //    AVPlayer / AVPlayerItem を View 内で直接生成・操作せず、すべて Proxy / Store へ委譲する。
 //  - View（VideoPlayerView）: 受け取った再生状態（VideoPlayerViewState）と操作クロージャを表示するだけ。副作用を持たない。

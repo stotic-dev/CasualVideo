@@ -8,7 +8,7 @@
 //  プレイヤー操作の責務が混ざり、テスタビリティも下がる。そこで操作をこの Proxy で抽象化し、
 //  本番の再生エンジンは `Infra` の Client に閉じ込める（`VideoLibraryRepository` と同じ方針）。
 //
-//  - 抽象化は protocol ではなく struct + クロージャで表現する（docs/architecture.md）。
+//  - 抽象化は protocol ではなく struct + クロージャで表現する（docs-internal/architecture.md）。
 //  - 型定義は `Core` に置き、本番実装（`.live`）は `App` が `Infra` の Client を用いて構築する。
 //  - 再生レイヤー（AVPlayerLayer）へのバインドに必要な `AVPlayer` は `player()` で取得する。
 //    これは「描画用の参照取得」であり、再生・停止などの「操作」はメソッド経由で行う。
