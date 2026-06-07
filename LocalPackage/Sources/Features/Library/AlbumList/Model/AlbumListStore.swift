@@ -9,19 +9,6 @@ import Core
 import Foundation
 import Observation
 
-/// アルバム一覧のロード状態。
-enum AlbumListLoadState: Sendable, Equatable {
-
-    /// 初期状態（読み込み前）。
-    case idle
-
-    /// 読み込み中。
-    case loading
-
-    /// アルバム一覧の読み込み完了。
-    case loaded([VideoAlbum])
-}
-
 /// 写真ライブラリのアルバム一覧を管理する Store。
 ///
 /// 状態はカプセル化し、公開 API を通じてのみ更新・参照する。UI 関連型は扱わない。
