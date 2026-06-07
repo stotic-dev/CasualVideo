@@ -21,6 +21,8 @@ public struct RootScreen: View {
 
     // 再生エンジン（AVPlayer）は単一インスタンスを生存させ続ける必要があるため @State で安定保持する。
     @State private var videoPlayerClient = VideoPlayerClient()
+    
+    @State private var nowPlayingInfoClient = NowPlayingInfoClient()
 
     public static func make() -> some View {
         RootScreen()
@@ -40,6 +42,10 @@ public struct RootScreen: View {
             .environment(
                 \.videoPlayerProxy,
                 .live(playerClient: videoPlayerClient, photoLibraryClient: photoLibraryClient)
+            )
+            .environment(
+                \.nowPlayingInfoProxy,
+                 .live(nowPlayingInfoClient: nowPlayingInfoClient, photoLibraryClient: photoLibraryClient)
             )
     }
 }

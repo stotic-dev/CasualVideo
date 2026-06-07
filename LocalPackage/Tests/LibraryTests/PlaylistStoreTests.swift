@@ -14,6 +14,7 @@
 //
 
 import Core
+import Foundation
 import Testing
 
 @testable import Library
@@ -35,6 +36,9 @@ struct PlaylistStoreTests {
     private func recordingProxy(
         played: Box<[String]>,
         paused: Box<Bool> = Box(false),
+        playResumed: Box<Bool> = Box(false),
+        seeked: Box<[TimeInterval]> = Box([]),
+        progressHandler: Box<(@MainActor @Sendable (PlaybackProgress) -> Void)?> = Box(nil),
         handler: Box<(@MainActor @Sendable () -> Void)?> = Box(nil)
     ) -> VideoPlayerProxy {
         VideoPlayerProxy(
@@ -42,8 +46,26 @@ struct PlaylistStoreTests {
                 await MainActor.run { played.value.append(id) }
                 return true
             },
+            play: { playResumed.value = true },
             pause: { paused.value = true },
-            observeDidPlayToEnd: { handler.value = $0 }
+            observeDidPlayToEnd: { handler.value = $0 },
+            seek: { seeked.value.append($0) },
+            observeProgress: { progressHandler.value = $0 }
+        )
+    }
+
+    /// updateNowPlayingInfo の引数と observeRemoteCommand のハンドラを記録する Proxy を作る。
+    private func recordingNowPlayingProxy(
+        infos: Box<[NowPlayingInfo]>,
+        remoteHandler: Box<(@MainActor @Sendable (RemoteCommand) -> Void)?> = Box(nil),
+        observeCount: Box<Int> = Box(0)
+    ) -> NowPlayingInfoProxy {
+        NowPlayingInfoProxy(
+            updateNowPlayingInfo: { infos.value.append($0) },
+            observeRemoteCommand: { handler in
+                observeCount.value += 1
+                remoteHandler.value = handler
+            }
         )
     }
 
@@ -52,7 +74,10 @@ struct PlaylistStoreTests {
     @Test("start 前は currentIndex / currentAsset が nil")
     func initialState_isEmpty() {
         // Arrange
-        let store = PlaylistStore(playerProxy: VideoPlayerProxy())
+        let store = PlaylistStore(
+            playerProxy: VideoPlayerProxy(),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
 
         // Act
         // （操作なし。生成直後の初期状態を検証する。）
@@ -67,7 +92,10 @@ struct PlaylistStoreTests {
     func start_playsFromGivenIndex() async {
         // Arrange
         let played = Box<[String]>([])
-        let store = PlaylistStore(playerProxy: recordingProxy(played: played))
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
 
         // Act
         await store.start(playlist: assets, from: 1)
@@ -90,7 +118,10 @@ struct PlaylistStoreTests {
     func start_clampsOutOfRangeIndex() async {
         // Arrange
         let played = Box<[String]>([])
-        let store = PlaylistStore(playerProxy: recordingProxy(played: played))
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
 
         // Act
         await store.start(playlist: assets, from: 99)
@@ -113,7 +144,10 @@ struct PlaylistStoreTests {
     func start_withEmptyPlaylist_doesNothing() async {
         // Arrange
         let played = Box<[String]>([])
-        let store = PlaylistStore(playerProxy: recordingProxy(played: played))
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
 
         // Act
         await store.start(playlist: [], from: 0)
@@ -127,7 +161,10 @@ struct PlaylistStoreTests {
     func canPlayNextPrevious_dependOnPosition() async {
         // Arrange
         let played = Box<[String]>([])
-        let store = PlaylistStore(playerProxy: recordingProxy(played: played))
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
 
         // Act: 先頭から再生開始
         await store.start(playlist: assets, from: 0)
@@ -168,7 +205,10 @@ struct PlaylistStoreTests {
     func playNext_advancesAndPlays() async {
         // Arrange
         let played = Box<[String]>([])
-        let store = PlaylistStore(playerProxy: recordingProxy(played: played))
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
         await store.start(playlist: assets, from: 0)
 
         // Act
@@ -192,7 +232,10 @@ struct PlaylistStoreTests {
     func playNext_atLast_doesNothing() async {
         // Arrange
         let played = Box<[String]>([])
-        let store = PlaylistStore(playerProxy: recordingProxy(played: played))
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
         await store.start(playlist: assets, from: 2)
 
         // Act
@@ -216,7 +259,10 @@ struct PlaylistStoreTests {
     func playPrevious_goesBackAndPlays() async {
         // Arrange
         let played = Box<[String]>([])
-        let store = PlaylistStore(playerProxy: recordingProxy(played: played))
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
         await store.start(playlist: assets, from: 2)
 
         // Act
@@ -240,7 +286,10 @@ struct PlaylistStoreTests {
     func playPrevious_atFirst_doesNothing() async {
         // Arrange
         let played = Box<[String]>([])
-        let store = PlaylistStore(playerProxy: recordingProxy(played: played))
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
         await store.start(playlist: assets, from: 0)
 
         // Act
@@ -267,7 +316,10 @@ struct PlaylistStoreTests {
         // Arrange
         let played = Box<[String]>([])
         let handler = Box<(@MainActor @Sendable () -> Void)?>(nil)
-        let store = PlaylistStore(playerProxy: recordingProxy(played: played, handler: handler))
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played, handler: handler),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
         await store.start(playlist: assets, from: 0)
         assertState(store, ExpectedState(
             playlistIDs: ["a", "b", "c"],
@@ -306,7 +358,8 @@ struct PlaylistStoreTests {
         let paused = Box(false)
         let handler = Box<(@MainActor @Sendable () -> Void)?>(nil)
         let store = PlaylistStore(
-            playerProxy: recordingProxy(played: played, paused: paused, handler: handler)
+            playerProxy: recordingProxy(played: played, paused: paused, handler: handler),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
         )
         await store.start(playlist: assets, from: 2)
         #expect(played.value == ["c"])
@@ -336,7 +389,10 @@ struct PlaylistStoreTests {
     func setPlaybackOrder_shuffle_keepsCurrentAsset() async {
         // Arrange
         let played = Box<[String]>([])
-        let store = PlaylistStore(playerProxy: recordingProxy(played: played))
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
         await store.start(playlist: assets, from: 1)
         #expect(store.currentAsset?.id == "b")
 
@@ -367,6 +423,7 @@ struct PlaylistStoreTests {
             let played = Box<[String]>([])
             let store = PlaylistStore(
                 playerProxy: recordingProxy(played: played),
+                nowPlayingInfoProxy: NowPlayingInfoProxy(),
                 playbackOrder: .shuffle
             )
 
@@ -395,6 +452,7 @@ struct PlaylistStoreTests {
         let played = Box<[String]>([])
         let store = PlaylistStore(
             playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy(),
             playbackOrder: .shuffle
         )
 
@@ -427,7 +485,10 @@ struct PlaylistStoreTests {
     func toggleShuffle_switchesOrderKeepingPosition() async {
         // Arrange
         let played = Box<[String]>([])
-        let store = PlaylistStore(playerProxy: recordingProxy(played: played))
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
         await store.start(playlist: assets, from: 1)
         #expect(store.playbackOrder == .sequential)
 
@@ -474,6 +535,7 @@ struct PlaylistStoreTests {
         let handler = Box<(@MainActor @Sendable () -> Void)?>(nil)
         let store = PlaylistStore(
             playerProxy: recordingProxy(played: played, handler: handler),
+            nowPlayingInfoProxy: NowPlayingInfoProxy(),
             repeatMode: .all
         )
         await store.start(playlist: assets, from: 2)
@@ -505,6 +567,7 @@ struct PlaylistStoreTests {
         let handler = Box<(@MainActor @Sendable () -> Void)?>(nil)
         let store = PlaylistStore(
             playerProxy: recordingProxy(played: played, handler: handler),
+            nowPlayingInfoProxy: NowPlayingInfoProxy(),
             repeatMode: .one
         )
         await store.start(playlist: assets, from: 1)
@@ -537,6 +600,7 @@ struct PlaylistStoreTests {
         let handler = Box<(@MainActor @Sendable () -> Void)?>(nil)
         let store = PlaylistStore(
             playerProxy: recordingProxy(played: played, paused: paused, handler: handler),
+            nowPlayingInfoProxy: NowPlayingInfoProxy(),
             repeatMode: .off
         )
         await store.start(playlist: assets, from: 2)
@@ -568,6 +632,7 @@ struct PlaylistStoreTests {
         let played = Box<[String]>([])
         let store = PlaylistStore(
             playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy(),
             repeatMode: .all
         )
 
@@ -610,6 +675,7 @@ struct PlaylistStoreTests {
         let played = Box<[String]>([])
         let store = PlaylistStore(
             playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy(),
             repeatMode: .all
         )
         await store.start(playlist: assets, from: 2)
@@ -638,6 +704,7 @@ struct PlaylistStoreTests {
         let played = Box<[String]>([])
         let store = PlaylistStore(
             playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: NowPlayingInfoProxy(),
             repeatMode: .all
         )
         await store.start(playlist: assets, from: 0)
@@ -658,6 +725,215 @@ struct PlaylistStoreTests {
             canPlayPrevious: true
         ))
         #expect(played.value == ["a", "c"])
+    }
+
+    // MARK: - NowPlayingInfo の更新（F-5）
+
+    @Test("start（再生開始）で現在アセットの NowPlayingInfo が更新される")
+    func start_updatesNowPlayingInfo() async {
+        // Arrange
+        let played = Box<[String]>([])
+        let infos = Box<[NowPlayingInfo]>([])
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: infos)
+        )
+
+        // Act
+        await store.start(playlist: assets, from: 1)
+
+        // Assert: 直近の更新は再生中の現在アセット("b")を反映する
+        let last = infos.value.last
+        #expect(last?.assetID == "b")
+        #expect(last?.isPlaying == true)
+        #expect(last?.title == "CasualVideo")
+    }
+
+    @Test("togglePlayPause で再生状態を反映した NowPlayingInfo が更新される")
+    func togglePlayPause_updatesNowPlayingInfo() async {
+        // Arrange
+        let played = Box<[String]>([])
+        let infos = Box<[NowPlayingInfo]>([])
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: infos)
+        )
+        await store.start(playlist: assets, from: 0)
+
+        // Act: 一時停止 → 再開
+        store.togglePlayPause()
+
+        // Assert: 一時停止が NowPlayingInfo に反映される
+        #expect(store.isPlaying == false)
+        #expect(infos.value.last?.isPlaying == false)
+
+        // Act
+        store.togglePlayPause()
+
+        // Assert: 再開が NowPlayingInfo に反映される
+        #expect(store.isPlaying == true)
+        #expect(infos.value.last?.isPlaying == true)
+    }
+
+    @Test("seek で再生位置（elapsedTime）を反映した NowPlayingInfo が更新される")
+    func seek_updatesNowPlayingInfo() async {
+        // Arrange
+        let played = Box<[String]>([])
+        let infos = Box<[NowPlayingInfo]>([])
+        let progressHandler = Box<(@MainActor @Sendable (PlaybackProgress) -> Void)?>(nil)
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played, progressHandler: progressHandler),
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: infos)
+        )
+        await store.start(playlist: assets, from: 0)
+        // シーク可能にするため進捗（再生長さ）を流し込む
+        progressHandler.value?(PlaybackProgress(currentTime: 0, duration: 10))
+
+        // Act
+        store.seek(to: 4)
+
+        // Assert: 即時反映された再生位置が NowPlayingInfo にも載る
+        #expect(store.progress.currentTime == 4)
+        #expect(infos.value.last?.elapsedTime == 4)
+    }
+
+    @Test("進捗監視の更新で NowPlayingInfo が更新される")
+    func observeProgress_updatesNowPlayingInfo() async {
+        // Arrange
+        let played = Box<[String]>([])
+        let infos = Box<[NowPlayingInfo]>([])
+        let progressHandler = Box<(@MainActor @Sendable (PlaybackProgress) -> Void)?>(nil)
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played, progressHandler: progressHandler),
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: infos)
+        )
+        await store.start(playlist: assets, from: 0)
+
+        // Act: 進捗を流す
+        progressHandler.value?(PlaybackProgress(currentTime: 3, duration: 10))
+
+        // Assert: 進捗が NowPlayingInfo に反映される
+        #expect(infos.value.last?.elapsedTime == 3)
+        #expect(infos.value.last?.duration == 10)
+    }
+
+    // MARK: - RemoteCommand のディスパッチ（F-5）
+
+    @Test("start 時に observeRemoteCommand は一度だけ登録される")
+    func start_registersRemoteCommandObserverOnce() async {
+        // Arrange
+        let played = Box<[String]>([])
+        let observeCount = Box(0)
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]), observeCount: observeCount)
+        )
+
+        // Act: 複数回 start しても登録は一度きり
+        await store.start(playlist: assets, from: 0)
+        await store.start(playlist: assets, from: 1)
+
+        // Assert
+        #expect(observeCount.value == 1)
+    }
+
+    @Test("RemoteCommand .toggle で再生状態がトグルされる")
+    func remoteCommand_toggle_togglesPlayback() async {
+        // Arrange
+        let played = Box<[String]>([])
+        let remoteHandler = Box<(@MainActor @Sendable (RemoteCommand) -> Void)?>(nil)
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]), remoteHandler: remoteHandler)
+        )
+        await store.start(playlist: assets, from: 0)
+        #expect(store.isPlaying == true)
+
+        // Act & Assert: toggle で一時停止
+        remoteHandler.value?(.toggle)
+        #expect(store.isPlaying == false)
+
+        // Act & Assert: 再度 toggle で再開
+        remoteHandler.value?(.toggle)
+        #expect(store.isPlaying == true)
+    }
+
+    @Test("RemoteCommand .pause / .play は現在状態に応じてディスパッチされる")
+    func remoteCommand_playPause_dispatch() async {
+        // Arrange
+        let played = Box<[String]>([])
+        let remoteHandler = Box<(@MainActor @Sendable (RemoteCommand) -> Void)?>(nil)
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]), remoteHandler: remoteHandler)
+        )
+        await store.start(playlist: assets, from: 0)
+
+        // Act & Assert: .pause で一時停止
+        remoteHandler.value?(.pause)
+        #expect(store.isPlaying == false)
+
+        // Act & Assert: すでに停止中の .pause は無視される
+        remoteHandler.value?(.pause)
+        #expect(store.isPlaying == false)
+
+        // Act & Assert: .play で再開
+        remoteHandler.value?(.play)
+        #expect(store.isPlaying == true)
+
+        // Act & Assert: すでに再生中の .play は無視される
+        remoteHandler.value?(.play)
+        #expect(store.isPlaying == true)
+    }
+
+    @Test("RemoteCommand .next / .previous で前後の動画へ遷移する")
+    func remoteCommand_nextPrevious_dispatch() async {
+        // Arrange
+        let played = Box<[String]>([])
+        let remoteHandler = Box<(@MainActor @Sendable (RemoteCommand) -> Void)?>(nil)
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played),
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]), remoteHandler: remoteHandler)
+        )
+        await store.start(playlist: assets, from: 0)
+
+        // Act: .next で次の動画へ（ディスパッチは Task のため完了を待つ）
+        remoteHandler.value?(.next)
+        await waitUntil { store.currentIndex == 1 && !store.isPreparingItem }
+
+        // Assert
+        #expect(store.currentAsset?.id == "b")
+        #expect(played.value == ["a", "b"])
+
+        // Act: .previous で前の動画へ
+        remoteHandler.value?(.previous)
+        await waitUntil { store.currentIndex == 0 && !store.isPreparingItem }
+
+        // Assert
+        #expect(store.currentAsset?.id == "a")
+        #expect(played.value == ["a", "b", "a"])
+    }
+
+    @Test("RemoteCommand .seek で指定秒へシークする")
+    func remoteCommand_seek_dispatch() async {
+        // Arrange
+        let played = Box<[String]>([])
+        let seeked = Box<[TimeInterval]>([])
+        let progressHandler = Box<(@MainActor @Sendable (PlaybackProgress) -> Void)?>(nil)
+        let remoteHandler = Box<(@MainActor @Sendable (RemoteCommand) -> Void)?>(nil)
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played, seeked: seeked, progressHandler: progressHandler),
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]), remoteHandler: remoteHandler)
+        )
+        await store.start(playlist: assets, from: 0)
+        progressHandler.value?(PlaybackProgress(currentTime: 0, duration: 10))
+
+        // Act
+        remoteHandler.value?(.seek(5))
+
+        // Assert: Proxy へシークが委譲され、進捗にも即時反映される
+        #expect(seeked.value == [5])
+        #expect(store.progress.currentTime == 5)
     }
 
     // MARK: - 共通 Assertion

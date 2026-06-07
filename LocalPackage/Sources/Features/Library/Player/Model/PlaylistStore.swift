@@ -49,6 +49,7 @@ final class PlaylistStore {
     private(set) var error: ErrorAlertItem?
 
     private let playerProxy: VideoPlayerProxy
+    private let nowPlayingInfoProxy: NowPlayingInfoProxy
 
     /// `playlist` のインデックスを再生する順に並べた配列。シャッフル時はここが入れ替わる。
     private var order: [Int] = []
@@ -62,12 +63,17 @@ final class PlaylistStore {
     /// 再生進捗オブザーバを一度だけ登録したかどうか。
     private var hasObservedProgress = false
 
+    /// リモートコマンドオブザーバを一度だけ登録したかどうか。
+    private var hasObservedRemoteCommand = false
+
     init(
         playerProxy: VideoPlayerProxy,
+        nowPlayingInfoProxy: NowPlayingInfoProxy,
         playbackOrder: PlaybackOrder = .sequential,
         repeatMode: RepeatMode = .off
     ) {
         self.playerProxy = playerProxy
+        self.nowPlayingInfoProxy = nowPlayingInfoProxy
         self.playbackOrder = playbackOrder
         self.repeatMode = repeatMode
     }
@@ -80,6 +86,8 @@ final class PlaylistStore {
 
     /// 現在再生中の動画。
     var currentAsset: VideoAsset? {
+        // エラーがある場合は現在再生できていないということになるので、nilを返す
+        if error != nil { return nil }
         guard let currentIndex, playlist.indices.contains(currentIndex) else { return nil }
         return playlist[currentIndex]
     }
@@ -118,6 +126,7 @@ final class PlaylistStore {
         playlist = assets
         registerDidPlayToEndIfNeeded()
         registerProgressObserverIfNeeded()
+        registerRemoteCommandObserverIfNeeded()
         let index = assets.indices.contains(startIndex) ? startIndex : 0
         let position = rebuildOrder(startingFrom: index)
         await play(orderPosition: position)
@@ -182,6 +191,7 @@ final class PlaylistStore {
             playerProxy.play()
             isPlaying = true
         }
+        updateNowPlayingInfo()
     }
 
     /// 指定秒へシークする（シークバー操作 / F-6）。
@@ -193,6 +203,7 @@ final class PlaylistStore {
         let clamped = min(max(seconds, 0), progress.duration)
         playerProxy.seek(clamped)
         progress.currentTime = clamped
+        updateNowPlayingInfo()
     }
 
     // MARK: - Private
@@ -270,8 +281,53 @@ final class PlaylistStore {
         guard !hasObservedProgress else { return }
         hasObservedProgress = true
         playerProxy.observeProgress { [weak self] progress in
-            self?.progress = progress
+            guard let self else { return }
+            self.progress = progress
+            self.updateNowPlayingInfo()
         }
+    }
+
+    private func registerRemoteCommandObserverIfNeeded() {
+        guard !hasObservedRemoteCommand else { return }
+        hasObservedRemoteCommand = true
+        nowPlayingInfoProxy.observeRemoteCommand { [weak self] command in
+            self?.handleRemoteCommand(command)
+        }
+    }
+
+    /// リモートコマンド（ロック画面 / コントロールセンター等）を既存の再生操作へディスパッチする。
+    private func handleRemoteCommand(_ command: RemoteCommand) {
+        switch command {
+        case .play:
+            guard !isPlaying else { return }
+            togglePlayPause()
+        case .pause:
+            guard isPlaying else { return }
+            togglePlayPause()
+        case .toggle:
+            togglePlayPause()
+        case .next:
+            Task { await playNext() }
+        case .previous:
+            Task { await playPrevious() }
+        case .seek(let seconds):
+            seek(to: seconds)
+        }
+    }
+
+    /// 現在の再生状態から `NowPlayingInfo` を構築し、Proxy 経由でシステムへ反映する（F-5）。
+    ///
+    /// タイトルは "CasualVideo" 固定（`VideoAsset` はファイル名を持たないため）。アートワークは
+    /// `assetID` を参照に App 側でサムネイル取得して設定する（Store は UI 型を扱わない）。
+    private func updateNowPlayingInfo() {
+        let info = NowPlayingInfo(
+            title: "CasualVideo",
+            duration: progress.duration,
+            elapsedTime: progress.currentTime,
+            isPlaying: isPlaying,
+            assetID: currentAsset?.id
+        )
+        nowPlayingInfoProxy.updateNowPlayingInfo(info)
     }
 
     private func play(orderPosition position: Int) async {
@@ -290,5 +346,7 @@ final class PlaylistStore {
             // 読み込みに失敗したらエラーに倒す
             error = .init(error: AppDomainError.failedLoadVideo)
         }
+        // 新しいアセットの Now Playing 情報（タイトル / アートワーク参照）を反映する（F-5）。
+        updateNowPlayingInfo()
     }
 }

@@ -30,9 +30,9 @@ extension VideoPlayerProxy {
         playerClient: VideoPlayerClient,
         photoLibraryClient: PhotoLibraryClient = PhotoLibraryClient(),
         audioSession: AudioSessionClient = AudioSessionClient(),
-        pictureInPictureClient: PictureInPictureClient = PictureInPictureClient()
+        pictureInPictureClient: PictureInPictureClient = PictureInPictureClient(),
     ) -> VideoPlayerProxy {
-        VideoPlayerProxy(
+        return VideoPlayerProxy(
             player: { playerClient.player },
             // 描画レイヤーへの player バインド（VideoPlayerClient）→ その layer で PIP 構成
             // （PictureInPictureClient）という複数 Infra をまたぐ描画面セットアップをここで組み立てる。
