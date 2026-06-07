@@ -31,7 +31,7 @@ public enum VideoLibraryLoadState: Sendable, Equatable {
 /// 写真ライブラリの動画一覧を管理する Store。
 ///
 /// 状態はカプセル化し、公開 API（メソッド・computed property）を通じてのみ更新・参照する。
-/// UI 関連型は扱わず、ドメインのロード状態のみを公開する（docs/architecture.md 参照）。
+/// UI 関連型は扱わず、ドメインのロード状態のみを公開する（docs-internal/architecture.md 参照）。
 @MainActor
 @Observable
 public final class VideoLibraryStore {

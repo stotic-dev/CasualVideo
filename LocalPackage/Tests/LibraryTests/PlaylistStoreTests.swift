@@ -5,7 +5,7 @@
 //  PlaylistStore（プレイリスト連続再生 F-4）のロジックを検証する。
 //
 //  PlaylistStore は再生エンジンの操作を VideoPlayerProxy（クロージャ保持の struct）へ委譲する。
-//  テストでは本番の `.live` ではなくクロージャを差し替えた Proxy を注入し（docs/testing.md）、
+//  テストでは本番の `.live` ではなくクロージャを差し替えた Proxy を注入し（docs-internal/testing.md）、
 //  「現在位置の遷移」「再生完了での自動遷移」「境界での停止」などのドメインロジックを検証する。
 //
 //  プレゼンテーションロジックのテストは複雑になりがちなため、各ケースは AAA パターン

@@ -13,7 +13,7 @@ $ARGUMENTS
 
 ## 実装手順
 
-ルールの正本は `docs/testing.md`。**着手前に必ず Read で読むこと。**
+ルールの正本は `docs-internal/testing.md`。**着手前に必ず Read で読むこと。**
 
 ### 1. 対象がテスト対象かを確認する
 
@@ -26,7 +26,7 @@ $ARGUMENTS
 ### 2. テストターゲットを選ぶ / 用意する
 
 - 対象モジュールに対応するテストターゲットへ追加する（`Core` → `CoreTests`、`Main` → `MainTests`）。
-- 新しいテストターゲットが必要なら、`Package.swift` の `AppTarget` に `testTargetName:` を指定し `.testTarget(...)` を追加する（`docs/architecture.md` の Package.swift 編集方法に従う）。
+- 新しいテストターゲットが必要なら、`Package.swift` の `AppTarget` に `testTargetName:` を指定し `.testTarget(...)` を追加する（`docs-internal/architecture.md` の Package.swift 編集方法に従う）。
 - スキャフォールドの `MyLibraryTests.swift` / `example` テストは意味のある名前へリネームして使う。
 
 ### 3. Swift Testing で書く

@@ -79,9 +79,9 @@ iOS の写真ライブラリ（標準アルバム / iCloud）にある動画を�
 
 ## 4. 非機能要件
 
-- **プラットフォーム**: iOS 26.0 以上（`docs/architecture.md` / `CLAUDE.md` 準拠）。
+- **プラットフォーム**: iOS 26.0 以上（`docs-internal/architecture.md` / `CLAUDE.md` 準拠）。
 - **アーキテクチャ**: 既存のレイヤード構成（App / Features / Core / Infra）に従う。PhotoKit・SwiftData への I/O は `Infra` に閉じ、`Repository` 経由でアクセスする。
-- **テスト**: Swift Testing でロジック層（Core / Features の Store）を検証する（`docs/testing.md` 準拠）。
+- **テスト**: Swift Testing でロジック層（Core / Features の Store）を検証する（`docs-internal/testing.md` 準拠）。
 - **プライバシー**: 写真ライブラリアクセスの用途を `Info.plist`（`NSPhotoLibraryUsageDescription` 等）に明記する。データは端末内に留め、外部送信しない。
 - **パフォーマンス**: 大量動画でも一覧スクロールが滑らかに動くよう、サムネイル取得を遅延・非同期で行う。
 

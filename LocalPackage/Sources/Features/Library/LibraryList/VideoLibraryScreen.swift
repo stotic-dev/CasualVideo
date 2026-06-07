@@ -4,7 +4,7 @@
 //
 //  写真ライブラリの動画一覧画面（F-1）。
 //
-//  Screen と presentational View の分離方針は docs/swiftui.md を参照。
+//  Screen と presentational View の分離方針は docs-internal/swiftui.md を参照。
 //  - Screen（VideoLibraryScreen）: Environment から Store を取得し副作用を担う。
 //  - View（VideoLibraryView）: init で受け取った状態を表示するだけ。副作用を持たない。
 //
@@ -37,7 +37,7 @@ public struct VideoLibraryScreen: View {
 /// 動画一覧の presentational View。init で受け取った状態を表示するだけで副作用を持たない。
 ///
 /// Store や Repository に依存しないため、Preview / Snapshot テストで状態を直接注入して
-/// 各ケースを再現できる（docs/swiftui.md 参照）。
+/// 各ケースを再現できる（docs-internal/swiftui.md 参照）。
 struct VideoLibraryView: View {
 
     let state: VideoLibraryViewState
