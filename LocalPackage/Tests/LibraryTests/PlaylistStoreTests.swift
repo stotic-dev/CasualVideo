@@ -766,9 +766,10 @@ struct PlaylistStoreTests {
         // Arrange
         let played = Box<[String]>([])
         let rateCalls = Box<[Float]>([])
+        let infos = Box<[NowPlayingInfo]>([])
         let store = PlaylistStore(
             playerProxy: recordingProxy(played: played, rateCalls: rateCalls),
-            nowPlayingInfoProxy: NowPlayingInfoProxy()
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: infos)
         )
 
         // Act
@@ -777,11 +778,29 @@ struct PlaylistStoreTests {
         // Assert: 状態が更新され、rawValue を Float へ変換した値が委譲される
         assertState(store, ExpectedState(playbackRate: .fast15))
         #expect(rateCalls.value == [1.5])
+        let expectedInfo = NowPlayingInfo(
+            title: "CasualVideo",
+            duration: store.progress.duration,
+            elapsedTime: store.progress.currentTime,
+            isPlaying: store.isPlaying,
+            rate: .fast15,
+            assetID: store.currentAsset?.id
+        )
+        #expect(infos.value == [expectedInfo])
 
         // Act & Assert: 別の速度でも正しく委譲される
         store.setPlaybackRate(.double)
         assertState(store, ExpectedState(playbackRate: .double))
         #expect(rateCalls.value == [1.5, 2.0])
+        let expectedInfo2 = NowPlayingInfo(
+            title: "CasualVideo",
+            duration: store.progress.duration,
+            elapsedTime: store.progress.currentTime,
+            isPlaying: store.isPlaying,
+            rate: .double,
+            assetID: store.currentAsset?.id
+        )
+        #expect(infos.value == [expectedInfo, expectedInfo2])
     }
 
     @Test("init で渡したミュート・速度は start 時に再生エンジンへ適用される（デフォルト適用）")

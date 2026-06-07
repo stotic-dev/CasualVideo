@@ -230,6 +230,8 @@ final class PlaylistStore {
     func setPlaybackRate(_ rate: PlaybackRate) {
         playbackRate = rate
         playerProxy.setRate(Float(rate.rawValue))
+        // NowPlayingInfoのRateも更新が必要
+        updateNowPlayingInfo()
     }
 
     // MARK: - Private

@@ -114,7 +114,6 @@ struct PlaybackControlsVisibilityTests {
 
         // Act & Assert: 1 回目の sleep を解放してもそれは古いタスクのものなので影響しない
         firstGate.release()
-        await Task.yield()
         assertState(visibility, ExpectedState(isVisible: true))
 
         // Act & Assert: 2 回目（最新）のタイマーを解放すると非表示になる
