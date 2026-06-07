@@ -41,7 +41,7 @@ public final class VideoLibraryStore {
 
     private let repository: VideoLibraryRepository
 
-    public init(repository: VideoLibraryRepository) {
+    public init(repository: VideoLibraryRepository = .init()) {
         self.repository = repository
     }
 

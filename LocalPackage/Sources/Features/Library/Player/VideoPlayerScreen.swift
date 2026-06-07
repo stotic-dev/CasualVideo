@@ -30,7 +30,8 @@ public struct VideoPlayerScreen: View {
 
     @Environment(\.videoPlayerProxy) private var playerProxy
     @Environment(\.nowPlayingInfoProxy) private var nowPlayingInfoProxy
-    @Environment(\.playbackSettingsRepository) private var playbackSettingsRepository
+    /// 再生デフォルト設定（ミュート・速度 / F-7）の共有 Store。設定画面と共有し、初期値の取得に用いる。
+    @Environment(SettingsStore.self) private var settingsStore
     @Environment(\.dismiss) var dismiss
 
     /// 再生リソースの読み込み状態（描画面のバインドは Proxy 経由で行うため、状態は進行のみを表す）。
@@ -126,8 +127,8 @@ private extension VideoPlayerScreen {
         // PIP・バックグラウンド再生（F-3）のためのオーディオセッションを再生前に構成する。
         playerProxy.prepareForBackgroundPlayback()
 
-        // 永続化された再生デフォルト（ミュート・速度 / F-7）を初期値として適用する。
-        let settings = playbackSettingsRepository.load()
+        // 共有 Store が保持する再生デフォルト（ミュート・速度 / F-7）を初期値として適用する。
+        let settings = settingsStore.settings
         let store = PlaylistStore(
             playerProxy: playerProxy,
             nowPlayingInfoProxy: nowPlayingInfoProxy,

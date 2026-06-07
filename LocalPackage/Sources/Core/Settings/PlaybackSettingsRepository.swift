@@ -8,8 +8,9 @@
 //  型定義は `Core` に置き、本番実装（`.live`）は `App` が `Infra`（UserDefaultsClient）を用いて構築する。
 //  永続化は UserDefaults のため同期 API でよい。
 //
-
-import SwiftUI
+//  この Repository は `App` が `SettingsStore`（共有 Store）を組み立てる際にのみ用いる。
+//  画面側は Repository を直接参照せず、注入された `SettingsStore` 経由で設定を取得・更新する。
+//
 
 /// 再生デフォルト設定の読み書きを抽象化する Repository。
 public struct PlaybackSettingsRepository: Sendable {
@@ -27,23 +28,4 @@ public struct PlaybackSettingsRepository: Sendable {
         self.load = load
         self.save = save
     }
-}
-
-extension EnvironmentValues {
-
-    /// 再生デフォルト設定 Repository の DI エントリ。
-    ///
-    /// 本番インスタンスは `App` が `Infra` の `UserDefaultsClient` を用いて構築し、
-    /// `.environment(\.playbackSettingsRepository, .live(client:))` で注入する。
-    /// 未注入時はメモリ上のデフォルト（永続化しない）フォールバック。
-    @Entry public var playbackSettingsRepository = PlaybackSettingsRepository.unimplemented
-}
-
-extension PlaybackSettingsRepository {
-
-    /// 未注入時のフォールバック。常にデフォルト設定を返し、保存は no-op。
-    public static let unimplemented = PlaybackSettingsRepository(
-        load: { PlaybackSettings() },
-        save: { _ in }
-    )
 }

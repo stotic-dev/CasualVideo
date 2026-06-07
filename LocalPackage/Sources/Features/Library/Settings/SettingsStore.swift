@@ -8,37 +8,39 @@
 import Core
 import Observation
 
-/// 再生デフォルト設定を管理する Store。
+/// 再生デフォルト設定を管理する共有 Store。
 ///
 /// `PlaybackSettingsRepository` を介して設定を読み込み、変更ごとに永続化する。
 /// 特定画面に依存しないドメイン状態のみを持ち、UI 型は扱わない（docs/architecture.md）。
+/// `App` で assemble して型ベースで Environment へ注入し、設定画面・再生画面など複数画面から
+/// `@Environment(SettingsStore.self)` で共有参照する。
 @Observable
 @MainActor
-final class SettingsStore {
+public final class SettingsStore {
 
     /// 現在の再生デフォルト設定。
-    private(set) var settings: PlaybackSettings
+    public private(set) var settings: PlaybackSettings
 
     private let repository: PlaybackSettingsRepository
 
-    init(repository: PlaybackSettingsRepository) {
+    public init(repository: PlaybackSettingsRepository = .init()) {
         self.repository = repository
         self.settings = repository.load()
     }
 
     /// 永続化された設定を読み込み直す。
-    func load() {
+    public func load() {
         settings = repository.load()
     }
 
     /// デフォルトミュートを設定し、永続化する。
-    func setMuted(_ isMuted: Bool) {
+    public func setMuted(_ isMuted: Bool) {
         settings.isMuted = isMuted
         repository.save(settings)
     }
 
     /// デフォルト再生速度を設定し、永続化する。
-    func setPlaybackRate(_ rate: PlaybackRate) {
+    public func setPlaybackRate(_ rate: PlaybackRate) {
         settings.playbackRate = rate
         repository.save(settings)
     }

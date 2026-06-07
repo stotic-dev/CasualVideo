@@ -7,7 +7,7 @@
 //  ライブラリ画面から開く設定画面のため、Features 同士の依存を避けて Library feature 内に置く。
 //
 //  Screen と presentational View の分離方針は docs/swiftui.md を参照。
-//  - Screen（SettingsScreen）: Environment から Repository を取得し Store を生成、副作用（永続化）を担う。
+//  - Screen（SettingsScreen）: 共有 Store（SettingsStore）を Environment から取得し、編集（副作用）を委譲する。
 //  - View（SettingsView）: init で受け取った設定値と操作クロージャを表示するだけ。副作用を持たない。
 //
 
@@ -17,24 +17,16 @@ import SwiftUI
 /// 再生デフォルト設定の編集画面。ライブラリのツールバー（歯車）から push される。
 struct SettingsScreen: View {
 
-    @Environment(\.playbackSettingsRepository) private var repository
-
-    /// 設定の編集・永続化を担う Store。設定画面のライフサイクルに紐づくため View 層で生成・保持する。
-    @State private var store: SettingsStore?
+    /// 再生デフォルト設定の共有 Store（App で assemble・注入）。再生画面とも共有する。
+    @Environment(SettingsStore.self) private var store
 
     var body: some View {
         SettingsView(
-            settings: store?.settings ?? PlaybackSettings(),
-            onSetMuted: { store?.setMuted($0) },
-            onSetPlaybackRate: { store?.setPlaybackRate($0) }
+            settings: store.settings,
+            onSetMuted: { store.setMuted($0) },
+            onSetPlaybackRate: { store.setPlaybackRate($0) }
         )
         .navigationTitle("設定")
-        .task {
-            // Repository は Environment 経由で受け取り、Store の生成・初期読み込みは Screen で行う。
-            if store == nil {
-                store = SettingsStore(repository: repository)
-            }
-        }
     }
 }
 
