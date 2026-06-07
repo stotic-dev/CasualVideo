@@ -44,10 +44,20 @@ struct VideoLibraryView: View {
     /// 未許可状態からの再試行アクション。副作用の実体は Screen 側にある。
     let onRetry: () async -> Void
 
+    /// 選択モード中かどうか（F-6 手動選択）。ビュー都合の状態のため presentational 側で保持する。
+    @State private var isSelecting = false
+
+    /// 選択中の動画 ID 集合。
+    @State private var selectedIDs: Set<VideoAsset.ID> = []
+
+    /// 連続再生プレイリスト（全動画再生 / 手動選択再生）への遷移トリガ。
+    @State private var playlistRequest: PlaylistRequest?
+
     var body: some View {
         NavigationStack {
             content
                 .navigationTitle("動画")
+                .toolbar { toolbarContent }
                 .navigationDestination(for: VideoAsset.self) { asset in
                     // 一覧セルからの遷移先（F-2 再生画面）。
                     // F-4: 表示中の一覧全体をプレイリストとし、選択動画から連続再生する。
@@ -56,6 +66,47 @@ struct VideoLibraryView: View {
                         startIndex: playlist.firstIndex(of: asset) ?? 0
                     )
                 }
+                .navigationDestination(item: $playlistRequest) { request in
+                    // 全動画再生 / 手動選択再生（F-6）。確定済みプレイリストを固定で渡す。
+                    VideoPlayerScreen(playlist: request.videos)
+                }
+                .navigationDestination(for: AlbumListDestination.self) { _ in
+                    // アルバム一覧（F-6 アルバム単位再生の起点）。
+                    AlbumListScreen()
+                }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if case .videos = state {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if isSelecting {
+                    Button("再生") { startSelectedPlayback() }
+                        .disabled(selectedIDs.isEmpty)
+                    Button("キャンセル") { exitSelectionMode() }
+                } else {
+                    // 全動画再生（F-6 全動画=ライブラリ全体の明示的な導線）。
+                    Button {
+                        playlistRequest = PlaylistRequest(videos: playlist)
+                    } label: {
+                        Label("全動画を再生", systemImage: "play.rectangle.on.rectangle")
+                    }
+                    .disabled(playlist.isEmpty)
+
+                    // アルバム一覧（F-6 アルバム単位再生の起点）。
+                    NavigationLink(value: AlbumListDestination()) {
+                        Label("アルバム", systemImage: "rectangle.stack")
+                    }
+
+                    // 手動選択モードへ入る（F-6 手動選択）。
+                    Button {
+                        isSelecting = true
+                    } label: {
+                        Label("選択", systemImage: "checkmark.circle")
+                    }
+                }
+            }
         }
     }
 
@@ -63,6 +114,27 @@ struct VideoLibraryView: View {
     private var playlist: [VideoAsset] {
         if case .videos(let videos) = state { return videos }
         return []
+    }
+
+    /// 選択された動画を表示順で抽出して再生へ遷移する。
+    private func startSelectedPlayback() {
+        let selected = playlist.filter { selectedIDs.contains($0.id) }
+        guard !selected.isEmpty else { return }
+        playlistRequest = PlaylistRequest(videos: selected)
+        exitSelectionMode()
+    }
+
+    private func exitSelectionMode() {
+        isSelecting = false
+        selectedIDs.removeAll()
+    }
+
+    private func toggleSelection(_ video: VideoAsset) {
+        if selectedIDs.contains(video.id) {
+            selectedIDs.remove(video.id)
+        } else {
+            selectedIDs.insert(video.id)
+        }
     }
 
     @ViewBuilder
@@ -80,7 +152,12 @@ struct VideoLibraryView: View {
             )
 
         case .videos(let videos):
-            VideoGridView(videos: videos)
+            VideoGridView(
+                videos: videos,
+                isSelecting: isSelecting,
+                selectedIDs: selectedIDs,
+                onToggleSelection: toggleSelection
+            )
 
         case .unauthorized(let status):
             VideoLibraryUnauthorizedView(status: status) {
@@ -89,3 +166,6 @@ struct VideoLibraryView: View {
         }
     }
 }
+
+/// アルバム一覧画面への遷移先を表すマーカー型。
+private struct AlbumListDestination: Hashable {}

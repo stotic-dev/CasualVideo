@@ -23,6 +23,14 @@ public struct VideoLibraryRepository: Sendable {
     /// 写真ライブラリ内の全動画アセットを撮影日の新しい順で取得する。
     public var fetchVideos: @Sendable () async -> [VideoAsset]
 
+    /// 動画を含むアルバム（コレクション）一覧を取得する（F-6 アルバム単位再生の起点）。
+    public var fetchAlbums: @Sendable () async -> [VideoAlbum]
+
+    /// 指定アルバム内の動画アセットを撮影日の新しい順で取得する（F-6 動的取得）。
+    ///
+    /// 「動的＝再生開始時に最新のアルバム内容を取得」するため、再生開始時にこの API を呼ぶ。
+    public var fetchVideosInAlbum: @Sendable (_ albumID: VideoAlbum.ID) async -> [VideoAsset]
+
     /// 指定アセットのサムネイルを非同期に取得する。
     ///
     /// パフォーマンス配慮のためセル表示時に遅延呼び出しする想定。取得できない場合は nil。
@@ -32,11 +40,15 @@ public struct VideoLibraryRepository: Sendable {
         authorizationStatus: @escaping @Sendable () async -> VideoLibraryAuthorizationStatus = { .authorized },
         requestAuthorization: @escaping @Sendable () async -> VideoLibraryAuthorizationStatus = { .authorized },
         fetchVideos: @escaping @Sendable () async -> [VideoAsset] = { [] },
+        fetchAlbums: @escaping @Sendable () async -> [VideoAlbum] = { [] },
+        fetchVideosInAlbum: @escaping @Sendable (_ albumID: VideoAlbum.ID) async -> [VideoAsset] = { _ in [] },
         loadThumbnail: @escaping @Sendable (_ id: VideoAsset.ID, _ size: CGSize) async -> CGImage? = { _, _ in nil }
     ) {
         self.authorizationStatus = authorizationStatus
         self.requestAuthorization = requestAuthorization
         self.fetchVideos = fetchVideos
+        self.fetchAlbums = fetchAlbums
+        self.fetchVideosInAlbum = fetchVideosInAlbum
         self.loadThumbnail = loadThumbnail
     }
 }
