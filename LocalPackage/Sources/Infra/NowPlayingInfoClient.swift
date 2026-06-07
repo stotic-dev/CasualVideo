@@ -72,6 +72,21 @@ public final class NowPlayingInfoClient {
         #endif
     }
 
+    /// アートワークのみを反映する。
+    ///
+    /// タイトル・再生位置・レートなど既存の Now Playing 情報は維持し、アートワークだけを差し替える。
+    /// アートワークは非同期取得のため、取得完了時点では `update(...)` により再生位置・レートが
+    /// 既に最新へ更新されている可能性がある。それらを巻き戻さないよう、artwork 反映はこのメソッドに
+    /// 限定し、`update(...)` で渡した（取得開始時点の）値を再送しないこと。
+    public func updateArtwork(_ artwork: CGImage) {
+        #if canImport(MediaPlayer) && os(iOS)
+        let center = MPNowPlayingInfoCenter.default()
+        var info = center.nowPlayingInfo ?? [:]
+        info[MPMediaItemPropertyArtwork] = Self.makeArtwork(from: artwork)
+        center.nowPlayingInfo = info
+        #endif
+    }
+
     #if canImport(MediaPlayer) && os(iOS)
     /// アートワークを生成する。
     ///

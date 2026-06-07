@@ -54,13 +54,10 @@ extension NowPlayingInfoProxy {
                     )
                     // 取得中にアセットがさらに切り替わっていたら破棄する。
                     guard artworkState.lastAssetID == assetID else { return }
-                    nowPlayingInfoClient.update(
-                        title: info.title,
-                        duration: info.duration,
-                        elapsedTime: info.elapsedTime,
-                        rate: rate,
-                        artwork: image
-                    )
+                    guard let image else { return }
+                    // 取得開始時点の再生位置・レートを再送すると、その間に進行/一時停止/シークした
+                    // 最新状態を巻き戻してしまう。ここではアートワークのみを差し替える。
+                    nowPlayingInfoClient.updateArtwork(image)
                 }
             },
             // Now Playing 情報のクリア（F-5）を Infra へ委譲し、直近アセット ID もリセットする。
