@@ -19,8 +19,11 @@ import SwiftUI
 /// プレイリストの全画面連続再生画面。一覧セルからの遷移先として用いる。
 public struct VideoPlayerScreen: View {
 
-    /// 連続再生の対象プレイリスト。
-    let playlist: [VideoAsset]
+    /// 連続再生の対象プレイリストを供給するプロバイダ。
+    ///
+    /// 固定一覧（全動画 / 手動選択）はそのまま返し、アルバム単位の場合は
+    /// 再生開始時に最新のアルバム内容を取得して返す（F-6 動的取得）。
+    let playlistProvider: () async -> [VideoAsset]
 
     /// 再生を開始するインデックス。
     let startIndex: Int
@@ -41,8 +44,15 @@ public struct VideoPlayerScreen: View {
     
     @State var errorAlertStore = ErrorAlertStore()
 
+    /// 固定のプレイリストで再生する（全動画 / 手動選択など、起動時点で確定する場合）。
     public init(playlist: [VideoAsset], startIndex: Int = 0) {
-        self.playlist = playlist
+        self.playlistProvider = { playlist }
+        self.startIndex = startIndex
+    }
+
+    /// 再生開始時にプレイリストを動的取得して再生する（アルバム単位 / F-6）。
+    public init(startIndex: Int = 0, playlistProvider: @escaping () async -> [VideoAsset]) {
+        self.playlistProvider = playlistProvider
         self.startIndex = startIndex
     }
 
@@ -100,6 +110,9 @@ private extension VideoPlayerScreen {
     func onAppear() async {
         // 既に準備済みなら作り直さない（再表示時の二重ロード防止）。
         if case .ready = state { return }
+
+        // プレイリストを供給する（アルバム単位は最新内容を動的取得する / F-6）。
+        let playlist = await playlistProvider()
         guard !playlist.isEmpty else {
             state = .failed
             return
