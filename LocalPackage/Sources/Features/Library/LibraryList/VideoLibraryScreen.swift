@@ -74,11 +74,23 @@ struct VideoLibraryView: View {
                     // アルバム一覧（F-6 アルバム単位再生の起点）。
                     AlbumListScreen()
                 }
+                .navigationDestination(for: SettingsDestination.self) { _ in
+                    // 再生デフォルト設定（F-7 ミュート・再生速度の永続化）。
+                    SettingsScreen()
+                }
         }
     }
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        // 設定（F-7）。選択モード以外では状態に依らず常に開けるようにする。
+        if !isSelecting {
+            ToolbarItem(placement: .primaryAction) {
+                NavigationLink(value: SettingsDestination()) {
+                    Label("設定", systemImage: "gearshape")
+                }
+            }
+        }
         if case .videos = state {
             ToolbarItemGroup(placement: .primaryAction) {
                 if isSelecting {
@@ -169,3 +181,6 @@ struct VideoLibraryView: View {
 
 /// アルバム一覧画面への遷移先を表すマーカー型。
 private struct AlbumListDestination: Hashable {}
+
+/// 設定画面への遷移先を表すマーカー型（F-7）。
+private struct SettingsDestination: Hashable {}

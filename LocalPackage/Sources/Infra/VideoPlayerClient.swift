@@ -68,6 +68,17 @@ public final class VideoPlayerClient {
         player.isMuted = muted
     }
 
+    /// 再生速度を設定する。
+    ///
+    /// `defaultRate` は AVPlayer のプロパティで、アイテム差し替え後も保持され `play()` がこの rate で
+    /// 再生を始めるため、`loadAndPlay` 後も維持される。再生中（rate != 0）なら即時反映する。
+    public func setRate(_ rate: Float) {
+        player.defaultRate = rate
+        if player.rate != 0 {
+            player.rate = rate
+        }
+    }
+
     /// 現在再生中アイテムの再生完了を購読する。再生完了のたびに `handler` が呼ばれる。
     ///
     /// プレイリストの「1 動画の再生終了で次へ自動遷移」（F-4）の起点となる。

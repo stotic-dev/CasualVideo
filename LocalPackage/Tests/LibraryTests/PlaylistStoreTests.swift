@@ -33,11 +33,15 @@ struct PlaylistStoreTests {
     }
 
     /// loadAndPlay された id を記録するだけの Proxy を作る。
+    ///
+    /// ミュート（`setMuted`）・速度（`setRate`）の委譲も記録できる（F-7）。
     private func recordingProxy(
         played: Box<[String]>,
         paused: Box<Bool> = Box(false),
         playResumed: Box<Bool> = Box(false),
         seeked: Box<[TimeInterval]> = Box([]),
+        mutedCalls: Box<[Bool]> = Box([]),
+        rateCalls: Box<[Float]> = Box([]),
         progressHandler: Box<(@MainActor @Sendable (PlaybackProgress) -> Void)?> = Box(nil),
         handler: Box<(@MainActor @Sendable () -> Void)?> = Box(nil)
     ) -> VideoPlayerProxy {
@@ -48,6 +52,8 @@ struct PlaylistStoreTests {
             },
             play: { playResumed.value = true },
             pause: { paused.value = true },
+            setMuted: { mutedCalls.value.append($0) },
+            setRate: { rateCalls.value.append($0) },
             observeDidPlayToEnd: { handler.value = $0 },
             seek: { seeked.value.append($0) },
             observeProgress: { progressHandler.value = $0 }
@@ -727,6 +733,113 @@ struct PlaylistStoreTests {
         #expect(played.value == ["a", "c"])
     }
 
+    // MARK: - ミュート / 再生速度（F-7）
+
+    @Test("toggleMute は isMuted をトグルし、playerProxy.setMuted へ委譲する")
+    func toggleMute_togglesAndDelegates() async {
+        // Arrange
+        let played = Box<[String]>([])
+        let mutedCalls = Box<[Bool]>([])
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played, mutedCalls: mutedCalls),
+            nowPlayingInfoProxy: NowPlayingInfoProxy()
+        )
+
+        // Act & Assert: false → true
+        store.toggleMute()
+        assertState(store, ExpectedState(isMuted: true))
+        #expect(mutedCalls.value == [true])
+
+        // Act & Assert: true → false
+        store.toggleMute()
+        assertState(store, ExpectedState(isMuted: false))
+        #expect(mutedCalls.value == [true, false])
+
+        // Act & Assert: false → true
+        store.toggleMute()
+        assertState(store, ExpectedState(isMuted: true))
+        #expect(mutedCalls.value == [true, false, true])
+    }
+
+    @Test("setPlaybackRate は playbackRate を更新し、playerProxy.setRate へ Float 値を委譲する")
+    func setPlaybackRate_updatesAndDelegates() async {
+        // Arrange
+        let played = Box<[String]>([])
+        let rateCalls = Box<[Float]>([])
+        let infos = Box<[NowPlayingInfo]>([])
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played, rateCalls: rateCalls),
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: infos)
+        )
+
+        // Act
+        store.setPlaybackRate(.fast15)
+
+        // Assert: 状態が更新され、rawValue を Float へ変換した値が委譲される
+        assertState(store, ExpectedState(playbackRate: .fast15))
+        #expect(rateCalls.value == [1.5])
+        let expectedInfo = NowPlayingInfo(
+            title: "CasualVideo",
+            duration: store.progress.duration,
+            elapsedTime: store.progress.currentTime,
+            isPlaying: store.isPlaying,
+            rate: .fast15,
+            assetID: store.currentAsset?.id
+        )
+        #expect(infos.value == [expectedInfo])
+
+        // Act & Assert: 別の速度でも正しく委譲される
+        store.setPlaybackRate(.double)
+        assertState(store, ExpectedState(playbackRate: .double))
+        #expect(rateCalls.value == [1.5, 2.0])
+        let expectedInfo2 = NowPlayingInfo(
+            title: "CasualVideo",
+            duration: store.progress.duration,
+            elapsedTime: store.progress.currentTime,
+            isPlaying: store.isPlaying,
+            rate: .double,
+            assetID: store.currentAsset?.id
+        )
+        #expect(infos.value == [expectedInfo, expectedInfo2])
+    }
+
+    @Test("init で渡したミュート・速度は start 時に再生エンジンへ適用される（デフォルト適用）")
+    func start_appliesInitialMuteAndRate() async {
+        // Arrange
+        let played = Box<[String]>([])
+        let mutedCalls = Box<[Bool]>([])
+        let rateCalls = Box<[Float]>([])
+        let store = PlaylistStore(
+            playerProxy: recordingProxy(played: played, mutedCalls: mutedCalls, rateCalls: rateCalls),
+            nowPlayingInfoProxy: NowPlayingInfoProxy(),
+            isMuted: true,
+            playbackRate: .fast15
+        )
+        // Arrange: start 前は初期値を保持し、まだ再生エンジンへは適用されていない
+        assertState(store, ExpectedState(isMuted: true, playbackRate: .fast15))
+        #expect(mutedCalls.value.isEmpty)
+        #expect(rateCalls.value.isEmpty)
+
+        // Act
+        await store.start(playlist: assets, from: 0)
+
+        // Assert: 再生開始時にデフォルト（ミュート true / 速度 1.5）が再生エンジンへ適用される
+        assertState(store, ExpectedState(
+            playlistIDs: ["a", "b", "c"],
+            isPlaying: true,
+            currentIndex: 0,
+            currentAssetID: "a",
+            currentPosition: 1,
+            totalCount: 3,
+            canPlayNext: true,
+            canPlayPrevious: false,
+            isMuted: true,
+            playbackRate: .fast15
+        ))
+        #expect(mutedCalls.value == [true])
+        #expect(rateCalls.value == [1.5])
+    }
+
     // MARK: - NowPlayingInfo の更新（F-5）
 
     @Test("start（再生開始）で現在アセットの NowPlayingInfo が更新される")
@@ -954,6 +1067,8 @@ struct PlaylistStoreTests {
         var canPlayNext: Bool = false
         var canPlayPrevious: Bool = false
         var progress: PlaybackProgress = PlaybackProgress()
+        var isMuted: Bool = false
+        var playbackRate: PlaybackRate = .normal
     }
 
     /// 公開状態を一括検証する共通 Assertion。
@@ -978,6 +1093,8 @@ struct PlaylistStoreTests {
         #expect(store.canPlayNext == expected.canPlayNext, sourceLocation: sourceLocation)
         #expect(store.canPlayPrevious == expected.canPlayPrevious, sourceLocation: sourceLocation)
         #expect(store.progress == expected.progress, sourceLocation: sourceLocation)
+        #expect(store.isMuted == expected.isMuted, sourceLocation: sourceLocation)
+        #expect(store.playbackRate == expected.playbackRate, sourceLocation: sourceLocation)
     }
 
     // MARK: - Test utility

@@ -61,24 +61,35 @@ struct VideoPlayerProxyTests {
 
     // MARK: - その他の操作委譲（回帰防止）
 
-    @Test("play / pause / setMuted も注入したクロージャへ委譲される")
+    @Test("play / pause / setMuted / setRate も注入したクロージャへ委譲される")
     func playerOperations_invokeInjectedClosures() {
         let played = Box(false)
         let paused = Box(false)
         let muted = Box<Bool?>(nil)
+        let rate = Box<Float?>(nil)
         let proxy = VideoPlayerProxy(
             play: { played.value = true },
             pause: { paused.value = true },
-            setMuted: { muted.value = $0 }
+            setMuted: { muted.value = $0 },
+            setRate: { rate.value = $0 }
         )
 
         proxy.play()
         proxy.pause()
         proxy.setMuted(true)
+        proxy.setRate(1.5)
 
         #expect(played.value)
         #expect(paused.value)
         #expect(muted.value == true)
+        #expect(rate.value == 1.5)
+    }
+
+    @Test("デフォルトの setRate は何もせずクラッシュしない")
+    func setRate_defaultIsNoop() {
+        let proxy = VideoPlayerProxy()
+        // デフォルト実装（{ _ in }）を呼んでもクラッシュしないことを確認する。
+        proxy.setRate(1.0)
     }
 
     // MARK: - observeDidPlayToEnd（F-4 連続再生の自動遷移フック）
