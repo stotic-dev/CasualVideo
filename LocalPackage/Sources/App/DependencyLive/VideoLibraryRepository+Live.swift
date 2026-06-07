@@ -22,6 +22,12 @@ extension VideoLibraryRepository {
             fetchVideos: {
                 client.fetchVideos().map(\.toDomain)
             },
+            fetchAlbums: {
+                client.fetchAlbums().map(\.toDomain)
+            },
+            fetchVideosInAlbum: { albumID in
+                client.fetchVideos(inAlbum: albumID).map(\.toDomain)
+            },
             loadThumbnail: { id, size in
                 await client.loadThumbnail(localIdentifier: id, size: size)
             }
@@ -49,6 +55,18 @@ extension PhotoVideoAsset {
             duration: duration,
             creationDate: creationDate,
             isInCloud: isInCloud
+        )
+    }
+}
+
+extension PhotoVideoAlbum {
+    /// Infra のアルバム情報を Core のドメインモデルへ変換する。
+    var toDomain: VideoAlbum {
+        VideoAlbum(
+            id: localIdentifier,
+            title: title,
+            videoCount: videoCount,
+            thumbnailAssetID: thumbnailLocalIdentifier
         )
     }
 }
