@@ -30,6 +30,7 @@ public struct VideoPlayerScreen: View {
 
     @Environment(\.videoPlayerProxy) private var playerProxy
     @Environment(\.nowPlayingInfoProxy) private var nowPlayingInfoProxy
+    @Environment(\.playbackSettingsRepository) private var playbackSettingsRepository
     @Environment(\.dismiss) var dismiss
 
     /// 再生リソースの読み込み状態（描画面のバインドは Proxy 経由で行うため、状態は進行のみを表す）。
@@ -82,6 +83,8 @@ public struct VideoPlayerScreen: View {
             isPreparingItem: playlistStore?.isPreparingItem ?? false,
             playbackOrder: playlistStore?.playbackOrder ?? .sequential,
             repeatMode: playlistStore?.repeatMode ?? .off,
+            isMuted: playlistStore?.isMuted ?? false,
+            playbackRate: playlistStore?.playbackRate ?? .normal,
             progress: playlistStore?.progress ?? PlaybackProgress(),
             areControlsVisible: controlsVisibility.isVisible,
             onToggleControls: { controlsVisibility.toggle() },
@@ -90,7 +93,9 @@ public struct VideoPlayerScreen: View {
             onPlayPrevious: { await playlistStore?.playPrevious() },
             onToggleShuffle: { playlistStore?.toggleShuffle() },
             onCycleRepeat: { playlistStore?.cycleRepeatMode() },
-            onSeek: { playlistStore?.seek(to: $0) }
+            onSeek: { playlistStore?.seek(to: $0) },
+            onToggleMute: { playlistStore?.toggleMute() },
+            onSelectRate: { playlistStore?.setPlaybackRate($0) }
         )
         #if os(iOS)
         return view.navigationBarTitleDisplayMode(.inline)
@@ -121,9 +126,13 @@ private extension VideoPlayerScreen {
         // PIP・バックグラウンド再生（F-3）のためのオーディオセッションを再生前に構成する。
         playerProxy.prepareForBackgroundPlayback()
 
+        // 永続化された再生デフォルト（ミュート・速度 / F-7）を初期値として適用する。
+        let settings = playbackSettingsRepository.load()
         let store = PlaylistStore(
             playerProxy: playerProxy,
-            nowPlayingInfoProxy: nowPlayingInfoProxy
+            nowPlayingInfoProxy: nowPlayingInfoProxy,
+            isMuted: settings.isMuted,
+            playbackRate: settings.playbackRate
         )
         playlistStore = store
         await store.start(playlist: playlist, from: startIndex)
@@ -163,6 +172,10 @@ struct VideoPlayerView: View {
     let isPreparingItem: Bool
     let playbackOrder: PlaybackOrder
     let repeatMode: RepeatMode
+    /// 音声ミュート中かどうか（F-7）。
+    let isMuted: Bool
+    /// 現在の再生速度（F-7）。
+    let playbackRate: PlaybackRate
     /// 現在再生中アイテムの再生進捗（シークバーの位置・長さ表示に用いる）。
     let progress: PlaybackProgress
     /// 再生コントロールを表示中かどうか。タップでトグルされ、一定時間後に自動で非表示になる。
@@ -176,6 +189,10 @@ struct VideoPlayerView: View {
     let onCycleRepeat: () -> Void
     /// シークバー操作による再生位置変更（指定秒へシーク）。
     let onSeek: (TimeInterval) -> Void
+    /// ミュート切り替え（F-7）。
+    let onToggleMute: () -> Void
+    /// 再生速度選択（F-7）。
+    let onSelectRate: (PlaybackRate) -> Void
 
     var body: some View {
         content
@@ -214,12 +231,16 @@ struct VideoPlayerView: View {
                             canPlayNext: canPlayNext,
                             isPreparingItem: isPreparingItem,
                             isPlaying: isPlaying,
+                            isMuted: isMuted,
+                            playbackRate: playbackRate,
                             onSeek: onSeek,
                             onPlayPrevious: onPlayPrevious,
                             onPlayNext: onPlayNext,
                             onToggleShuffle: onToggleShuffle,
                             onCycleRepeat: onCycleRepeat,
-                            onTogglePlayPause: onTogglePlayPause
+                            onTogglePlayPause: onTogglePlayPause,
+                            onToggleMute: onToggleMute,
+                            onSelectRate: onSelectRate
                         )
                     }
                 }
@@ -245,6 +266,8 @@ private func previewVideoPlayerView(
     isPreparingItem: Bool = false,
     playbackOrder: PlaybackOrder = .sequential,
     repeatMode: RepeatMode = .off,
+    isMuted: Bool = false,
+    playbackRate: PlaybackRate = .normal,
     progress: PlaybackProgress = PlaybackProgress(currentTime: 42, duration: 215),
     areControlsVisible: Bool = true
 ) -> some View {
@@ -258,6 +281,8 @@ private func previewVideoPlayerView(
         isPreparingItem: isPreparingItem,
         playbackOrder: playbackOrder,
         repeatMode: repeatMode,
+        isMuted: isMuted,
+        playbackRate: playbackRate,
         progress: progress,
         areControlsVisible: areControlsVisible,
         onToggleControls: {},
@@ -266,7 +291,9 @@ private func previewVideoPlayerView(
         onPlayPrevious: {},
         onToggleShuffle: {},
         onCycleRepeat: {},
-        onSeek: { _ in }
+        onSeek: { _ in },
+        onToggleMute: {},
+        onSelectRate: { _ in }
     )
     .environment(\.isPreview, true)
 }

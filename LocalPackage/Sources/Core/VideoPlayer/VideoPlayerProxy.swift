@@ -45,8 +45,11 @@ public struct VideoPlayerProxy: Sendable {
     /// 再生を一時停止する。
     public var pause: @MainActor @Sendable () -> Void
 
-    /// 音声ミュートを切り替える（F-7 で使用予定）。
+    /// 音声ミュートを切り替える（F-7）。
     public var setMuted: @MainActor @Sendable (_ muted: Bool) -> Void
+
+    /// 再生速度を設定する（F-7）。AVPlayer の rate 値（`Float`）を渡す。
+    public var setRate: @MainActor @Sendable (_ rate: Float) -> Void
 
     /// バックグラウンド再生・PIP（F-3）のためにオーディオセッションを構成・アクティブ化する。
     ///
@@ -76,6 +79,7 @@ public struct VideoPlayerProxy: Sendable {
         play: @escaping @MainActor @Sendable () -> Void = {},
         pause: @escaping @MainActor @Sendable () -> Void = {},
         setMuted: @escaping @MainActor @Sendable (_ muted: Bool) -> Void = { _ in },
+        setRate: @escaping @MainActor @Sendable (_ rate: Float) -> Void = { _ in },
         prepareForBackgroundPlayback: @escaping @MainActor @Sendable () -> Void = {},
         observeDidPlayToEnd: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in },
         seek: @escaping @MainActor @Sendable (_ seconds: TimeInterval) -> Void = { _ in },
@@ -88,6 +92,7 @@ public struct VideoPlayerProxy: Sendable {
         self.play = play
         self.pause = pause
         self.setMuted = setMuted
+        self.setRate = setRate
         self.prepareForBackgroundPlayback = prepareForBackgroundPlayback
         self.observeDidPlayToEnd = observeDidPlayToEnd
         self.seek = seek

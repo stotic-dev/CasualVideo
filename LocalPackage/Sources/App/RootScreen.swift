@@ -24,6 +24,9 @@ public struct RootScreen: View {
     
     @State private var nowPlayingInfoClient = NowPlayingInfoClient()
 
+    // 再生デフォルト設定（F-7）の永続化窓口。UserDefaults への単一窓口を安定保持する。
+    @State private var userDefaultsClient = UserDefaultsClient()
+
     public static func make() -> some View {
         RootScreen()
     }
@@ -47,5 +50,6 @@ public struct RootScreen: View {
                 \.nowPlayingInfoProxy,
                  .live(nowPlayingInfoClient: nowPlayingInfoClient, photoLibraryClient: photoLibraryClient)
             )
+            .environment(\.playbackSettingsRepository, .live(client: userDefaultsClient))
     }
 }

@@ -44,6 +44,12 @@ final class PlaylistStore {
     ///
     /// 再生エンジンの定期時刻監視（`VideoPlayerProxy.observeProgress`）を購読して更新する。
     private(set) var progress = PlaybackProgress()
+
+    /// 音声ミュート中かどうか（F-7）。再生開始時はデフォルト設定で初期化される。
+    private(set) var isMuted: Bool
+
+    /// 現在の再生速度（F-7）。再生開始時はデフォルト設定で初期化される。
+    private(set) var playbackRate: PlaybackRate
     
     /// エラーが発生した時に設定される
     private(set) var error: ErrorAlertItem?
@@ -70,12 +76,16 @@ final class PlaylistStore {
         playerProxy: VideoPlayerProxy,
         nowPlayingInfoProxy: NowPlayingInfoProxy,
         playbackOrder: PlaybackOrder = .sequential,
-        repeatMode: RepeatMode = .off
+        repeatMode: RepeatMode = .off,
+        isMuted: Bool = false,
+        playbackRate: PlaybackRate = .normal
     ) {
         self.playerProxy = playerProxy
         self.nowPlayingInfoProxy = nowPlayingInfoProxy
         self.playbackOrder = playbackOrder
         self.repeatMode = repeatMode
+        self.isMuted = isMuted
+        self.playbackRate = playbackRate
     }
 
     /// 現在再生中の動画のインデックス（`playlist` 上の位置）。未再生時は `nil`。
@@ -127,6 +137,10 @@ final class PlaylistStore {
         registerDidPlayToEndIfNeeded()
         registerProgressObserverIfNeeded()
         registerRemoteCommandObserverIfNeeded()
+        // 再生開始前にデフォルト（ミュート・速度 / F-7）を再生エンジンへ適用する。
+        // player レベルで保持されるため、以降の item 差し替え後も有効。
+        playerProxy.setMuted(isMuted)
+        playerProxy.setRate(Float(playbackRate.rawValue))
         let index = assets.indices.contains(startIndex) ? startIndex : 0
         let position = rebuildOrder(startingFrom: index)
         await play(orderPosition: position)
@@ -204,6 +218,18 @@ final class PlaylistStore {
         playerProxy.seek(clamped)
         progress.currentTime = clamped
         updateNowPlayingInfo()
+    }
+
+    /// 音声ミュートをトグルする（F-7）。再生エンジンの操作は Proxy へ委譲する。
+    func toggleMute() {
+        isMuted.toggle()
+        playerProxy.setMuted(isMuted)
+    }
+
+    /// 再生速度を設定する（F-7）。再生エンジンの操作は Proxy へ委譲する。
+    func setPlaybackRate(_ rate: PlaybackRate) {
+        playbackRate = rate
+        playerProxy.setRate(Float(rate.rawValue))
     }
 
     // MARK: - Private

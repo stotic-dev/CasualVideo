@@ -16,12 +16,20 @@ struct PlayerControlsContent: View {
     let canPlayNext: Bool
     let isPreparingItem: Bool
     let isPlaying: Bool
+    /// 音声ミュート中かどうか（F-7）。
+    let isMuted: Bool
+    /// 現在の再生速度（F-7）。
+    let playbackRate: PlaybackRate
     let onSeek: (TimeInterval) -> Void
     let onPlayPrevious: () async -> Void
     let onPlayNext: () async -> Void
     let onToggleShuffle: () -> Void
     let onCycleRepeat: () -> Void
     let onTogglePlayPause: () -> Void
+    /// ミュート切り替え（F-7）。
+    let onToggleMute: () -> Void
+    /// 再生速度選択（F-7）。
+    let onSelectRate: (PlaybackRate) -> Void
     
     var body: some View {
         ZStack {
@@ -53,6 +61,17 @@ struct PlayerControlsContent: View {
                 }
                 HStack(spacing: 32) {
                     Spacer()
+                    // ミュート切り替え（F-7）。ミュート時はアクセントカラーで状態を示す。
+                    playerControlButton {
+                        Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    } action: {
+                        onToggleMute()
+                    }
+                    .foregroundStyle(isMuted ? Color.accentColor : .white)
+
+                    // 再生速度選択（F-7）。現在の速度をラベルに表示し、Menu から選択する。
+                    rateMenu
+
                     // シャッフル切り替え（F-5）。有効時はアクセントカラーで状態を示す。
                     playerControlButton {
                         Image(systemName: "shuffle")
@@ -95,6 +114,28 @@ private extension PlayerControlsContent {
         }
     }
     
+    /// 再生速度選択 Menu（F-7）。ラベルは現在の速度、項目は全速度で選択中にチェックを付ける。
+    private var rateMenu: some View {
+        Menu {
+            ForEach(PlaybackRate.allCases) { rate in
+                Button {
+                    onSelectRate(rate)
+                } label: {
+                    if rate == playbackRate {
+                        Label(rate.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(rate.displayName)
+                    }
+                }
+            }
+        } label: {
+            Text(playbackRate.displayName)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .padding(8)
+        }
+    }
+
     private func playerControlButton(content: () -> some View, action: @escaping () -> Void) -> some View {
         Button {
             action()
@@ -124,6 +165,8 @@ private func previewPlayerControlsContent(
     isPreparingItem: Bool = false,
     playbackOrder: PlaybackOrder = .sequential,
     repeatMode: RepeatMode = .off,
+    isMuted: Bool = false,
+    playbackRate: PlaybackRate = .normal,
     progress: PlaybackProgress = PlaybackProgress(currentTime: 42, duration: 215)
 ) -> some View {
     PlayerControlsContent(
@@ -134,12 +177,16 @@ private func previewPlayerControlsContent(
         canPlayNext: true,
         isPreparingItem: isPreparingItem,
         isPlaying: isPlaying,
+        isMuted: isMuted,
+        playbackRate: playbackRate,
         onSeek: { _ in },
         onPlayPrevious: {},
         onPlayNext: {},
         onToggleShuffle: {},
         onCycleRepeat: {},
-        onTogglePlayPause: {}
+        onTogglePlayPause: {},
+        onToggleMute: {},
+        onSelectRate: { _ in }
     )
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(.black)
@@ -163,6 +210,10 @@ private func previewPlayerControlsContent(
 
 #Preview("シーク不可（長さ未確定）") {
     previewPlayerControlsContent(progress: PlaybackProgress(currentTime: 0, duration: 0))
+}
+
+#Preview("ミュート + 2.0x") {
+    previewPlayerControlsContent(isMuted: true, playbackRate: .double)
 }
 
 #endif

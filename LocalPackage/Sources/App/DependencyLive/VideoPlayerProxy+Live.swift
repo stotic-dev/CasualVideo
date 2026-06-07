@@ -54,6 +54,8 @@ extension VideoPlayerProxy {
             play: { playerClient.play() },
             pause: { playerClient.pause() },
             setMuted: { playerClient.setMuted($0) },
+            // 再生速度（F-7）を AVPlayer 窓口へ委譲。defaultRate により item 差し替え後も維持される。
+            setRate: { playerClient.setRate($0) },
             // バックグラウンド再生・PIP（F-3）のためのオーディオセッション設定を Infra へ委譲。
             prepareForBackgroundPlayback: { audioSession.activatePlayback() },
             // プレイリスト連続再生（F-4）のための再生完了購読を Infra へ委譲。
