@@ -12,47 +12,17 @@ struct VideoCellView: View {
 
     let video: VideoAsset
 
-    @Environment(\.videoLibraryRepository) private var repository
-    @Environment(\.displayScale) private var displayScale
-    @State private var thumbnail: CGImage?
-
     var body: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .bottomTrailing) {
-                thumbnailLayer
-                gradientOverlay
-                metaOverlay
-                if video.isInCloud {
-                    iCloudIndicator
-                }
-            }
-            .clipShape(.rect(cornerRadius: 4))
-            .task {
-                // セル表示時に遅延・非同期でサムネイルを取得する。
-                guard thumbnail == nil else { return }
-                let pixelSize = CGSize(
-                    width: proxy.size.width * displayScale,
-                    height: proxy.size.height * displayScale
-                )
-                thumbnail = await repository.loadThumbnail(video.id, pixelSize)
+        ZStack(alignment: .bottomTrailing) {
+            // サムネイル表示（取得・Preview モック分岐）は共通コンポーネントに委譲する。
+            ThumbnailView(assetID: video.id)
+            gradientOverlay
+            metaOverlay
+            if video.isInCloud {
+                iCloudIndicator
             }
         }
-    }
-
-    @ViewBuilder
-    private var thumbnailLayer: some View {
-        if let thumbnail {
-            Image(decorative: thumbnail, scale: displayScale)
-                .resizable()
-                .scaledToFill()
-        } else {
-            Rectangle()
-                .fill(.quaternary)
-                .overlay {
-                    Image(systemName: "video")
-                        .foregroundStyle(.secondary)
-                }
-        }
+        .clipShape(.rect(cornerRadius: 4))
     }
 
     private var gradientOverlay: some View {
