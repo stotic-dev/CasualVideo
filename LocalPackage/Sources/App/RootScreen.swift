@@ -30,7 +30,12 @@ public struct RootScreen: View {
 
     // 再生デフォルト設定（F-7）の永続化窓口。UserDefaults への単一窓口を安定保持する。
     @State private var userDefaultsClient = UserDefaultsClient()
-    
+
+    // GoogleCast SDK の窓口。Cast コンテキスト初期化・セッション購読を担う単一インスタンスを安定保持する。
+    @State private var castClient = CastClient()
+    // ローカル動画を LAN 上で HTTP 配信するサーバ。Cast セッション中ずっと生存させる必要があるため安定保持する。
+    @State private var mediaServer = LocalMediaServer()
+
     // MARK: Storeの保持
     
     @State private var videoLibraryStore = VideoLibraryStore()
@@ -88,6 +93,16 @@ public struct RootScreen: View {
             // 再生 Store は、PIP コントローラ・再生エンジンと同じ Infra Client 群を共有する
             // Proxy で構築する。これにより PIP の開始・「戻る」購読・描画バインドが単一の
             // PictureInPictureClient / VideoPlayerClient を介して整合する。
+            // Cast の本番実装を assemble する。SDK 窓口・ローカル HTTP サーバ・PhotoKit を組み合わせ、
+            // ローカル動画を Chromecast へ引き継ぐオーケストレーションを構築する。
+            let castProxy = CastProxy.live(
+                castClient: castClient,
+                mediaServer: mediaServer,
+                photoLibraryClient: photoLibraryClient
+            )
+            // アプリ起動時に Cast コンテキスト（receiver application ID）を初期化し、配信サーバを起動する。
+            castProxy.setUp()
+
             playbackStore = PlaybackStore(
                 playerProxy: .live(
                     playerClient: videoPlayerClient,
@@ -98,7 +113,8 @@ public struct RootScreen: View {
                     nowPlayingInfoClient: nowPlayingInfoClient,
                     photoLibraryClient: photoLibraryClient
                 ),
-                settingsStore: settingsStore
+                settingsStore: settingsStore,
+                castProxy: castProxy
             )
             isInitialized = true
         }

@@ -13,6 +13,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>同じネットワーク上の Chromecast デバイスを検出し、動画をキャストするために使用します。</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_googlecast._tcp</string>

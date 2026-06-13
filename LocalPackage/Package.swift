@@ -59,7 +59,9 @@ let package = Package(
         .target(
             name: infra.name,
             dependencies: [
-                .product(name: "GoogleCast", package: "google-cast-sdk")
+                // GoogleCast SDK は iOS スライスのみ（xcframework に macOS なし）。
+                // `swift test` 等のホスト（macOS）ビルドで解決失敗しないよう iOS 限定の依存にする。
+                .product(name: "GoogleCast", package: "google-cast-sdk", condition: .when(platforms: [.iOS]))
             ]
         ),
         .testTarget(

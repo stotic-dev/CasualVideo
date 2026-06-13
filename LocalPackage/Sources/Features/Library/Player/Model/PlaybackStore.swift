@@ -57,19 +57,26 @@ public final class PlaybackStore {
     /// PIP へ移行すると false（モーダルは閉じるがセッションは生存）。PIP の「戻る」で true に戻る。
     public var isPlayerPresented = false
 
+    /// Chromecast 接続中かどうか。接続時は再生中アセットを Cast デバイスへ引き継ぐ。
+    public private(set) var isCasting = false
+
     private let playerProxy: VideoPlayerProxy
     private let nowPlayingInfoProxy: NowPlayingInfoProxy
     /// 再生開始時の初期値（ミュート・速度 / F-7）を供給する設定 Store。
     private let settingsStore: SettingsStore
+    /// Chromecast 操作の抽象。セッション接続購読・メディアロードを委譲する。
+    private let castProxy: CastProxy
 
     public init(
         playerProxy: VideoPlayerProxy,
         nowPlayingInfoProxy: NowPlayingInfoProxy,
-        settingsStore: SettingsStore
+        settingsStore: SettingsStore,
+        castProxy: CastProxy = CastProxy()
     ) {
         self.playerProxy = playerProxy
         self.nowPlayingInfoProxy = nowPlayingInfoProxy
         self.settingsStore = settingsStore
+        self.castProxy = castProxy
         // 未再生時の空セッション。start() で実プレイリストの Store に差し替える。
         self.playlistStore = PlaylistStore(playerProxy: playerProxy, nowPlayingInfoProxy: nowPlayingInfoProxy)
 
@@ -77,6 +84,12 @@ public final class PlaybackStore {
         // 再提示するだけで再生を中断せず元の状態（位置・順序）から続けられる。
         playerProxy.observePictureInPictureRestore { [weak self] in
             self?.isPlayerPresented = true
+        }
+
+        // Cast セッションの接続を購読する。接続時に現在再生中のローカル動画を Chromecast へ引き継ぐ
+        // （ローカルアセットの書き出し・HTTP 配信・ロードは CastProxy の本番実装が App で組み立てる）。
+        castProxy.observeSessionState { [weak self] state in
+            self?.handleCastSessionState(state)
         }
     }
 
@@ -120,6 +133,21 @@ public final class PlaybackStore {
     }
 
     // MARK: - Private
+
+    /// Cast セッションの接続状態変化に応じて、再生中アセットの引き継ぎを行う。
+    ///
+    /// 接続時は現在再生中のアセットを Chromecast へロードして再生する（ローカル再生は継続させ、
+    /// 端末側はミュート等の制御を別途必要に応じて行う想定だが、本実装ではロードまでを担う）。
+    private func handleCastSessionState(_ state: CastSessionState) {
+        switch state {
+        case .connected:
+            isCasting = true
+            guard let asset = playlistStore.currentAsset else { return }
+            Task { _ = await castProxy.loadAndPlay(asset.id) }
+        case .disconnected:
+            isCasting = false
+        }
+    }
 
     private func presentAndLoad(startIndex: Int, provider: @escaping () async -> [VideoAsset]) {
         // 取得を待たずに全画面プレイヤーを提示し、ローディングを見せる。

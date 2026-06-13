@@ -14,7 +14,13 @@ public struct CastComponentResolver: Sendable {
     public init(
         @ViewBuilder resolve: @escaping @MainActor @Sendable () -> some View
     ) {
-        _resolve = { AnyView(resolve()) }
+        _resolve = {
+            AnyView(
+                resolve()
+                    .frame(width: 12, height: 12)
+                    .padding(8)
+            )
+        }
     }
     
     @MainActor
