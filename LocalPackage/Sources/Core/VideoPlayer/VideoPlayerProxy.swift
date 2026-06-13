@@ -36,6 +36,13 @@ public struct VideoPlayerProxy: Sendable {
     /// 自動 PIP 起動（F-3）の有効/無効を切り替える。
     public var setPictureInPictureEnabled: @MainActor @Sendable (Bool) -> Void
 
+    /// PIP（F-3）を手動で開始する。コントロールの PIP ボタンからの明示的な遷移に用いる。
+    ///
+    /// 開始完了後に `onDidStart` が呼ばれる。再生画面（モーダル）を閉じる前に PIP が実際に
+    /// 立ち上がったことを保証するため、呼び出し側はこのコールバック内で画面を閉じる。
+    /// PIP 非対応・開始不可の場合はコールバックは呼ばれない（no-op）。
+    public var startPictureInPicture: @MainActor @Sendable (_ onDidStart: @escaping @MainActor @Sendable () -> Void) -> Void
+
     /// 指定アセットの動画を読み込み、再生を開始する。読み込み成否を返す。
     public var loadAndPlay: @Sendable (_ id: VideoAsset.ID) async -> Bool
 
@@ -75,6 +82,7 @@ public struct VideoPlayerProxy: Sendable {
         player: @escaping @MainActor @Sendable () -> AVPlayer? = { nil },
         attachPlayerLayer: @escaping @MainActor @Sendable (AVPlayerLayer) -> Void = { _ in },
         setPictureInPictureEnabled: @escaping @MainActor @Sendable (Bool) -> Void = { _ in },
+        startPictureInPicture: @escaping @MainActor @Sendable (_ onDidStart: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in },
         loadAndPlay: @escaping @Sendable (_ id: VideoAsset.ID) async -> Bool = { _ in false },
         play: @escaping @MainActor @Sendable () -> Void = {},
         pause: @escaping @MainActor @Sendable () -> Void = {},
@@ -88,6 +96,7 @@ public struct VideoPlayerProxy: Sendable {
         self.player = player
         self.attachPlayerLayer = attachPlayerLayer
         self.setPictureInPictureEnabled = setPictureInPictureEnabled
+        self.startPictureInPicture = startPictureInPicture
         self.loadAndPlay = loadAndPlay
         self.play = play
         self.pause = pause

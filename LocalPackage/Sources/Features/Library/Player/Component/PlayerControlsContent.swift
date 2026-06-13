@@ -30,7 +30,9 @@ struct PlayerControlsContent: View {
     let onToggleMute: () -> Void
     /// 再生速度選択（F-7）。
     let onSelectRate: (PlaybackRate) -> Void
-    
+    /// PIP（ピクチャ・イン・ピクチャ）へ遷移する（F-3）。タップで再生画面を閉じ、PIP 小窓へ移行する。
+    let onStartPictureInPicture: () -> Void
+
     var body: some View {
         ZStack {
             HStack(spacing: 32) {
@@ -60,6 +62,14 @@ struct PlayerControlsContent: View {
                         .padding(.bottom, 8)
                 }
                 HStack(spacing: 32) {
+                    // PIP へ遷移（F-3）。再生画面を閉じて PIP 小窓へ移行する。
+                    playerControlButton {
+                        Image(systemName: "pip.enter")
+                    } action: {
+                        onStartPictureInPicture()
+                    }
+                    .foregroundStyle(.white)
+
                     Spacer()
                     // ミュート切り替え（F-7）。ミュート時はアクセントカラーで状態を示す。
                     playerControlButton {
@@ -186,7 +196,8 @@ private func previewPlayerControlsContent(
         onCycleRepeat: {},
         onTogglePlayPause: {},
         onToggleMute: {},
-        onSelectRate: { _ in }
+        onSelectRate: { _ in },
+        onStartPictureInPicture: {}
     )
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(.black)

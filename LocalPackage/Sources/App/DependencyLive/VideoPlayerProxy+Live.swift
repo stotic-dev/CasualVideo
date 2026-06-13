@@ -42,6 +42,8 @@ extension VideoPlayerProxy {
             },
             // 自動 PIP 起動（F-3）の有効/無効を PIP Client へ委譲。
             setPictureInPictureEnabled: { pictureInPictureClient.setAutomaticStartEnabled($0) },
+            // コントロールの PIP ボタンからの手動開始（F-3）を PIP Client へ委譲。
+            startPictureInPicture: { onDidStart in pictureInPictureClient.startPictureInPicture(onDidStart: onDidStart) },
             // 取得（PhotoKit）→ 差し替え → 再生、という複数 Infra をまたぐ手順をここで組み立てる。
             loadAndPlay: { id in
                 guard let item = await photoLibraryClient.loadPlayerItem(localIdentifier: id) else {

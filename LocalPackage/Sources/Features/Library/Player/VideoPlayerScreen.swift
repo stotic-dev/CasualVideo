@@ -117,7 +117,10 @@ public struct VideoPlayerScreen: View {
             onCycleRepeat: { playlistStore?.cycleRepeatMode() },
             onSeek: { playlistStore?.seek(to: $0) },
             onToggleMute: { playlistStore?.toggleMute() },
-            onSelectRate: { playlistStore?.setPlaybackRate($0) }
+            onSelectRate: { playlistStore?.setPlaybackRate($0) },
+            // PIP（F-3）を開始し、実際に立ち上がってから再生画面（モーダル）を閉じる。
+            // 先に閉じると描画レイヤーが外れて PIP 遷移が中断されるため、開始完了を待つ。
+            onStartPictureInPicture: { playerProxy.startPictureInPicture { dismiss() } }
         )
     }
 
@@ -210,6 +213,8 @@ struct VideoPlayerView: View {
     let onToggleMute: () -> Void
     /// 再生速度選択（F-7）。
     let onSelectRate: (PlaybackRate) -> Void
+    /// PIP へ遷移する（F-3）。タップで再生画面を閉じ、PIP 小窓へ移行する。
+    let onStartPictureInPicture: () -> Void
 
     var body: some View {
         content
@@ -257,7 +262,8 @@ struct VideoPlayerView: View {
                             onCycleRepeat: onCycleRepeat,
                             onTogglePlayPause: onTogglePlayPause,
                             onToggleMute: onToggleMute,
-                            onSelectRate: onSelectRate
+                            onSelectRate: onSelectRate,
+                            onStartPictureInPicture: onStartPictureInPicture
                         )
                     }
                 }
@@ -310,7 +316,8 @@ private func previewVideoPlayerView(
         onCycleRepeat: {},
         onSeek: { _ in },
         onToggleMute: {},
-        onSelectRate: { _ in }
+        onSelectRate: { _ in },
+        onStartPictureInPicture: {}
     )
     .environment(\.isPreview, true)
 }

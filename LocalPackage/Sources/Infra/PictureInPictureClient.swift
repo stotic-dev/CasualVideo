@@ -30,6 +30,9 @@ public final class PictureInPictureClient {
     #if canImport(AVKit) && os(iOS)
     /// AVPlayerLayer に紐づく PIP コントローラ。`configure(playerLayer:)` で生成・差し替えする。
     private var controller: AVPictureInPictureController?
+    /// PIP 開始完了を closure へ転送するデリゲート。手動開始（`startPictureInPicture`）の完了検知に用いる。
+    /// nonisolated init を保つため、メインアクター隔離されたこのインスタンスは遅延生成する。
+    private lazy var delegate = PictureInPictureDelegate()
     #endif
 
     /// 自動 PIP 起動の有効/無効。controller 生成前に設定されても保持し、生成時に反映する。
@@ -46,6 +49,7 @@ public final class PictureInPictureClient {
         guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
         let controller = AVPictureInPictureController(playerLayer: playerLayer)
         controller?.canStartPictureInPictureAutomaticallyFromInline = automaticStartEnabled
+        controller?.delegate = delegate
         self.controller = controller
         #endif
     }
@@ -57,4 +61,37 @@ public final class PictureInPictureClient {
         controller?.canStartPictureInPictureAutomaticallyFromInline = enabled
         #endif
     }
+
+    /// PIP を手動で開始する。コントロールの PIP ボタンからの明示的な遷移に用いる。
+    ///
+    /// 開始が実際に完了したタイミングで `onDidStart` を呼ぶ。再生画面（モーダル）を閉じる前に
+    /// PIP が立ち上がったことを保証するため、開始要求の直後ではなくデリゲートの完了通知を起点とする。
+    /// PIP 非対応・開始不可（`isPictureInPicturePossible == false`）の場合は何もしない。
+    public func startPictureInPicture(onDidStart: @escaping @MainActor () -> Void) {
+        #if canImport(AVKit) && os(iOS)
+        guard let controller, controller.isPictureInPicturePossible else { return }
+        delegate.onDidStart = onDidStart
+        controller.startPictureInPicture()
+        #endif
+    }
 }
+
+#if canImport(AVKit) && os(iOS)
+/// AVPictureInPictureController の開始完了を closure へ転送するデリゲート。
+///
+/// `PictureInPictureClient` は値管理に専念させ、NSObject 由来のデリゲート責務をこの小さな
+/// 転送オブジェクトへ分離する。AVKit のデリゲートはメインアクター隔離前提のため `@MainActor`。
+@MainActor
+private final class PictureInPictureDelegate: NSObject, @MainActor AVPictureInPictureControllerDelegate {
+
+    /// PIP 開始完了時に一度だけ呼ぶ closure。
+    var onDidStart: (@MainActor () -> Void)?
+
+    func pictureInPictureControllerDidStartPictureInPicture(
+        _ pictureInPictureController: AVPictureInPictureController
+    ) {
+        onDidStart?()
+        onDidStart = nil
+    }
+}
+#endif
