@@ -30,6 +30,10 @@ struct SeekBar: View {
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.white)
         }
+        // シークバーのパネル背面に Liquid Glass を敷く（iOS 26 / macOS 26）。
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .glassEffect(in: .rect(cornerRadius: 20))
     }
 
     /// 表示・つまみ位置に使う秒数（ドラッグ中は一時値、それ以外は実進捗）。
