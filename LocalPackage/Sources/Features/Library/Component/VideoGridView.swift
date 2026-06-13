@@ -11,6 +11,8 @@ import Core
 struct VideoGridView: View {
 
     let videos: [VideoAsset]
+    /// セルタップ時のアクション。選択された動画を呼び出し元（VideoLibraryView）へ渡す。
+    let onSelect: (VideoAsset) -> Void
 
     private let columns = [GridItem(.adaptive(minimum: 100), spacing: 2)]
 
@@ -18,9 +20,11 @@ struct VideoGridView: View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 2) {
                 ForEach(videos) { video in
-                    // セルタップで再生画面（F-2）へ遷移する。遷移先は VideoLibraryView の
-                    // navigationDestination(for: VideoAsset.self) で解決する。
-                    NavigationLink(value: video) {
+                    // セルタップで再生画面（F-2）をモーダル表示する。
+                    // 選択状態の保持・モーダル提示は VideoLibraryView 側で行う。
+                    Button {
+                        onSelect(video)
+                    } label: {
                         VideoCellView(video: video)
                             .aspectRatio(1, contentMode: .fill)
                     }

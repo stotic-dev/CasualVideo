@@ -44,14 +44,20 @@ struct VideoLibraryView: View {
     /// 未許可状態からの再試行アクション。副作用の実体は Screen 側にある。
     let onRetry: () async -> Void
 
+    /// モーダルで再生中の動画。nil の間は再生画面を提示しない。
+    @State private var selectedVideo: VideoAsset?
+
     var body: some View {
         NavigationStack {
             content
                 .navigationTitle("動画")
-                .navigationDestination(for: VideoAsset.self) { asset in
-                    // 一覧セルからの遷移先（F-2 再生画面）。
-                    VideoPlayerScreen(asset: asset)
-                }
+        }
+        // 一覧セルから選んだ動画（F-2 再生画面）をモーダル（fullScreenCover）で提示する。
+        .fullScreenCover(item: $selectedVideo) { asset in
+            VideoPlayerScreen(asset: asset) {
+                // 閉じる導線。選択状態をクリアしてモーダルを閉じる。
+                selectedVideo = nil
+            }
         }
     }
 
@@ -70,7 +76,9 @@ struct VideoLibraryView: View {
             )
 
         case .videos(let videos):
-            VideoGridView(videos: videos)
+            VideoGridView(videos: videos) { video in
+                selectedVideo = video
+            }
 
         case .unauthorized(let status):
             VideoLibraryUnauthorizedView(status: status) {

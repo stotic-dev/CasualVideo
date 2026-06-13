@@ -15,29 +15,44 @@ import AVFoundation
 import Core
 import SwiftUI
 
-/// 動画の全画面再生画面。一覧セルからの遷移先として用いる。
+/// 動画の全画面再生画面。一覧セルからのモーダル（fullScreenCover）提示先として用いる。
 public struct VideoPlayerScreen: View {
 
     let asset: VideoAsset
+    /// 閉じる導線のアクション。モーダル提示元（VideoLibraryView）で選択状態をクリアする。
+    let onClose: () -> Void
 
     @Environment(\.videoPlayerProxy) private var playerProxy
     @State private var state: VideoPlayerViewState = .loading
 
-    public init(asset: VideoAsset) {
+    public init(asset: VideoAsset, onClose: @escaping () -> Void) {
         self.asset = asset
+        self.onClose = onClose
     }
 
     public var body: some View {
-        playerView
-            .navigationTitle(navigationTitle)
-            .task {
-                // ライフサイクルに紐づく副作用（読み込み・再生開始）は Screen 側に置く。
-                await start()
-            }
-            .onDisappear {
-                // 画面を離れたら再生を止める（操作は Proxy 経由）。
-                playerProxy.pause()
-            }
+        NavigationStack {
+            playerView
+                .navigationTitle(navigationTitle)
+                .toolbar {
+                    // モーダルには戻るボタンがないため、明示的な閉じる導線を置く。
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button {
+                            onClose()
+                        } label: {
+                            Image(systemName: "xmark")
+                        }
+                    }
+                }
+        }
+        .task {
+            // ライフサイクルに紐づく副作用（読み込み・再生開始）は Screen 側に置く。
+            await start()
+        }
+        .onDisappear {
+            // 画面を離れたら再生を止める（操作は Proxy 経由）。
+            playerProxy.pause()
+        }
     }
 
     private var playerView: some View {
