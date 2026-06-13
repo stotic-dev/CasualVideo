@@ -73,6 +73,8 @@ public struct RootScreen: View {
                     .environment(videoLibraryStore)
                     .environment(settingsStore)
                     .environment(playbackStore)
+                // UI関連のDI
+                    .environment(\.castComponentResolver, .live)
             } else {
                 ProgressView()
             }
