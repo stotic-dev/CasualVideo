@@ -42,6 +42,10 @@ extension VideoPlayerProxy {
             },
             // 自動 PIP 起動（F-3）の有効/無効を PIP Client へ委譲。
             setPictureInPictureEnabled: { pictureInPictureClient.setAutomaticStartEnabled($0) },
+            // コントロールの PIP ボタンからの手動開始（F-3）を PIP Client へ委譲。
+            startPictureInPicture: { onDidStart in pictureInPictureClient.startPictureInPicture(onDidStart: onDidStart) },
+            // PIP の「戻る」要求（復帰）の購読を PIP Client へ委譲。
+            observePictureInPictureRestore: { handler in pictureInPictureClient.observePictureInPictureRestore(handler) },
             // 取得（PhotoKit）→ 差し替え → 再生、という複数 Infra をまたぐ手順をここで組み立てる。
             loadAndPlay: { id in
                 guard let item = await photoLibraryClient.loadPlayerItem(localIdentifier: id) else {
@@ -53,6 +57,12 @@ extension VideoPlayerProxy {
             },
             play: { playerClient.play() },
             pause: { playerClient.pause() },
+            // 閉じる導線での再生完全停止（item 解放・オブザーバ解除）を AVPlayer 窓口へ委譲。
+            stop: { playerClient.stop() },
+            // 閉じる導線での PIP 停止を PIP Client へ委譲。
+            stopPictureInPicture: { pictureInPictureClient.stopPictureInPicture() },
+            // 閉じる導線でのオーディオセッション非アクティブ化を Infra へ委譲。
+            deactivateAudioSession: { audioSession.deactivate() },
             setMuted: { playerClient.setMuted($0) },
             // 再生速度（F-7）を AVPlayer 窓口へ委譲。defaultRate により item 差し替え後も維持される。
             setRate: { playerClient.setRate($0) },

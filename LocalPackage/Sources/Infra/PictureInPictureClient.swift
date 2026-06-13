@@ -30,6 +30,9 @@ public final class PictureInPictureClient {
     #if canImport(AVKit) && os(iOS)
     /// AVPlayerLayer に紐づく PIP コントローラ。`configure(playerLayer:)` で生成・差し替えする。
     private var controller: AVPictureInPictureController?
+    /// PIP 開始完了を closure へ転送するデリゲート。手動開始（`startPictureInPicture`）の完了検知に用いる。
+    /// nonisolated init を保つため、メインアクター隔離されたこのインスタンスは遅延生成する。
+    private lazy var delegate = PictureInPictureDelegate()
     #endif
 
     /// 自動 PIP 起動の有効/無効。controller 生成前に設定されても保持し、生成時に反映する。
@@ -46,6 +49,7 @@ public final class PictureInPictureClient {
         guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
         let controller = AVPictureInPictureController(playerLayer: playerLayer)
         controller?.canStartPictureInPictureAutomaticallyFromInline = automaticStartEnabled
+        controller?.delegate = delegate
         self.controller = controller
         #endif
     }
@@ -57,4 +61,76 @@ public final class PictureInPictureClient {
         controller?.canStartPictureInPictureAutomaticallyFromInline = enabled
         #endif
     }
+
+    /// PIP を手動で開始する。コントロールの PIP ボタンからの明示的な遷移に用いる。
+    ///
+    /// 開始が実際に完了したタイミングで `onDidStart` を呼ぶ。再生画面（モーダル）を閉じる前に
+    /// PIP が立ち上がったことを保証するため、開始要求の直後ではなくデリゲートの完了通知を起点とする。
+    /// PIP 非対応・開始不可（`isPictureInPicturePossible == false`）の場合は何もしない。
+    public func startPictureInPicture(onDidStart: @escaping @MainActor () -> Void) {
+        #if canImport(AVKit) && os(iOS)
+        guard let controller, controller.isPictureInPicturePossible else { return }
+        delegate.onDidStart = onDidStart
+        controller.startPictureInPicture()
+        #endif
+    }
+
+    /// PIP（小窓）を停止する。閉じる導線での再生セッション破棄に用いる。
+    ///
+    /// PIP コントローラが存在すれば停止要求を送るだけに責務を限定する。iOS 以外（macOS）では no-op。
+    public func stopPictureInPicture() {
+        #if canImport(AVKit) && os(iOS)
+        controller?.stopPictureInPicture()
+        #endif
+    }
+
+    /// PIP の「戻る（restore）」要求を購読する。復帰ボタンが押されるたびに `handler` が呼ばれる。
+    ///
+    /// `handler` は閉じていた UI（再生画面）を再提示する責務を担う。システムへの完了通知
+    /// （`completionHandler(true)`）は再提示要求の直後に Infra 側で代行するため、`handler` は
+    /// 完了ハンドラを意識しない。
+    public func observePictureInPictureRestore(_ handler: @escaping @MainActor () -> Void) {
+        #if canImport(AVKit) && os(iOS)
+        delegate.onRestore = handler
+        #endif
+    }
 }
+
+#if canImport(AVKit) && os(iOS)
+/// AVPictureInPictureController の開始完了を closure へ転送するデリゲート。
+///
+/// `PictureInPictureClient` は値管理に専念させ、NSObject 由来のデリゲート責務をこの小さな
+/// 転送オブジェクトへ分離する。AVKit のデリゲートはメインアクター隔離前提のため `@MainActor`。
+@MainActor
+private final class PictureInPictureDelegate: NSObject, @MainActor AVPictureInPictureControllerDelegate {
+
+    /// PIP 開始完了時に一度だけ呼ぶ closure。
+    var onDidStart: (@MainActor () -> Void)?
+
+    /// PIP の「戻る（restore）」要求時に呼ぶ closure。閉じていた UI の再提示を担う。
+    var onRestore: (@MainActor () -> Void)?
+
+    func pictureInPictureControllerDidStartPictureInPicture(
+        _ pictureInPictureController: AVPictureInPictureController
+    ) {
+        onDidStart?()
+        onDidStart = nil
+    }
+
+    /// PIP 小窓の復帰ボタンが押されたときに呼ばれる。閉じていた UI を再提示し、完了を通知する。
+    ///
+    /// 再提示（`onRestore`）は状態更新（モーダル再提示）として行い、その直後に
+    /// `completionHandler(true)` を呼んでシステムへ UI 復帰の完了を伝える。
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+    ) {
+        guard let onRestore else {
+            completionHandler(false)
+            return
+        }
+        onRestore()
+        completionHandler(true)
+    }
+}
+#endif

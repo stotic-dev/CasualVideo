@@ -92,6 +92,18 @@ public final class VideoPlayerClient {
         player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
+    /// 再生を完全停止し、再生アイテムを解放する。閉じる導線での再生セッション破棄に用いる。
+    ///
+    /// 一時停止 → 現在アイテムを外す（`replaceCurrentItem(with: nil)`）→ 再生完了 / 定期時刻の
+    /// オブザーバを解放する、という AVPlayer 単体の停止操作だけを担う。「いつ停止するか」という
+    /// 使う側の都合は持たない。
+    public func stop() {
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        removeDidPlayToEndObserver()
+        removePeriodicTimeObserver()
+    }
+
     /// 再生時刻を一定間隔で購読する。更新のたびに「現在位置（秒）・総再生時間（秒）」を `handler` へ渡す。
     ///
     /// シークバーの位置・長さ表示（F-6）の起点となる。総再生時間が未確定なら 0 を渡す。

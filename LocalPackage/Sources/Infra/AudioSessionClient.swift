@@ -31,4 +31,15 @@ public struct AudioSessionClient: Sendable {
         try? session.setActive(true)
         #endif
     }
+
+    /// オーディオセッションを非アクティブ化する。閉じる導線での再生セッション破棄に用いる。
+    ///
+    /// `.playback` セッションを `setActive(false)` で解除する。失敗しても致命的ではないため
+    /// エラーは握りつぶす（ラフな"ながら見"体験を優先）。iOS 以外（macOS）では no-op。
+    public func deactivate() {
+        #if canImport(AVFAudio) && os(iOS)
+        let session = AVAudioSession.sharedInstance()
+        try? session.setActive(false)
+        #endif
+    }
 }

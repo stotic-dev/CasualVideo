@@ -20,6 +20,7 @@ struct PlayerControlsContent: View {
     let isMuted: Bool
     /// 現在の再生速度（F-7）。
     let playbackRate: PlaybackRate
+    let onClose: () -> Void
     let onSeek: (TimeInterval) -> Void
     let onPlayPrevious: () async -> Void
     let onPlayNext: () async -> Void
@@ -30,10 +31,35 @@ struct PlayerControlsContent: View {
     let onToggleMute: () -> Void
     /// 再生速度選択（F-7）。
     let onSelectRate: (PlaybackRate) -> Void
-    
+    /// PIP（ピクチャ・イン・ピクチャ）へ遷移する（F-3）。タップで再生画面を閉じ、PIP 小窓へ移行する。
+    let onStartPictureInPicture: () -> Void
+
     var body: some View {
+        // 近接する Liquid Glass ボタン同士をブレンド・最適化するためコンテナで囲う。
+        GlassEffectContainer {
+            controls
+        }
+    }
+
+    private var controls: some View {
         ZStack {
-            HStack(spacing: 32) {
+            HStack(spacing: .zero) {
+                playerControlButton {
+                    Image(systemName: "xmark")
+                } action: {
+                    onClose()
+                }
+                Spacer()
+                // PIP へ遷移（F-3）。再生画面を閉じて PIP 小窓へ移行する。
+                playerControlButton {
+                    Image(systemName: "pip.enter")
+                } action: {
+                    onStartPictureInPicture()
+                }
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            HStack(spacing: .zero) {
                 playerControlButton {
                     Image(systemName: "backward.fill")
                 } action: {
@@ -41,10 +67,10 @@ struct PlayerControlsContent: View {
                 }
                 .disabled(!canPlayPrevious)
                 .foregroundStyle(.white)
-
+                Spacer()
                 // 再生 / 一時停止。セットアップ中はインジケーターへ差し替える。
                 playPauseControl
-
+                Spacer()
                 playerControlButton {
                     Image(systemName: "forward.fill")
                 } action: {
@@ -59,7 +85,7 @@ struct PlayerControlsContent: View {
                     SeekBar(progress: progress, onSeek: onSeek)
                         .padding(.bottom, 8)
                 }
-                HStack(spacing: 32) {
+                HStack(spacing: 16) {
                     Spacer()
                     // ミュート切り替え（F-7）。ミュート時はアクセントカラーで状態を示す。
                     playerControlButton {
@@ -87,6 +113,7 @@ struct PlayerControlsContent: View {
                     }
                     .foregroundStyle(repeatMode == .off ? Color.white : Color.accentColor)
                 }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .frame(maxHeight: .infinity, alignment: .bottom)
         }
@@ -134,6 +161,8 @@ private extension PlayerControlsContent {
                 .foregroundStyle(.white)
                 .padding(8)
         }
+        // 速度選択 Menu も他のボタンと揃えて Liquid Glass を与える。
+        .buttonStyle(.glass)
     }
 
     private func playerControlButton(content: () -> some View, action: @escaping () -> Void) -> some View {
@@ -141,8 +170,11 @@ private extension PlayerControlsContent {
             action()
         } label: {
             content()
+                .frame(width: 12, height: 12)
                 .padding(8)
         }
+        // コントロールの各ボタンに Liquid Glass を与える（iOS 26 / macOS 26）。
+        .buttonStyle(.glass)
     }
 
     /// リピートモードに対応する SF Symbol 名。
@@ -179,6 +211,7 @@ private func previewPlayerControlsContent(
         isPlaying: isPlaying,
         isMuted: isMuted,
         playbackRate: playbackRate,
+        onClose: {},
         onSeek: { _ in },
         onPlayPrevious: {},
         onPlayNext: {},
@@ -186,7 +219,8 @@ private func previewPlayerControlsContent(
         onCycleRepeat: {},
         onTogglePlayPause: {},
         onToggleMute: {},
-        onSelectRate: { _ in }
+        onSelectRate: { _ in },
+        onStartPictureInPicture: {}
     )
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(.black)

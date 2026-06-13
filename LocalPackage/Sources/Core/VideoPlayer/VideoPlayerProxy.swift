@@ -36,6 +36,19 @@ public struct VideoPlayerProxy: Sendable {
     /// 自動 PIP 起動（F-3）の有効/無効を切り替える。
     public var setPictureInPictureEnabled: @MainActor @Sendable (Bool) -> Void
 
+    /// PIP（F-3）を手動で開始する。コントロールの PIP ボタンからの明示的な遷移に用いる。
+    ///
+    /// 開始完了後に `onDidStart` が呼ばれる。再生画面（モーダル）を閉じる前に PIP が実際に
+    /// 立ち上がったことを保証するため、呼び出し側はこのコールバック内で画面を閉じる。
+    /// PIP 非対応・開始不可の場合はコールバックは呼ばれない（no-op）。
+    public var startPictureInPicture: @MainActor @Sendable (_ onDidStart: @escaping @MainActor @Sendable () -> Void) -> Void
+
+    /// PIP の「戻る（restore）」要求を購読する。PIP 小窓の復帰ボタンが押されるたびに handler が呼ばれる。
+    ///
+    /// PIP 開始時に閉じた再生画面（モーダル）を再提示して全画面表示へ戻すために用いる。
+    /// UI 復帰の指示（再提示）だけを担い、システムへの完了通知は Infra 側が代行する。
+    public var observePictureInPictureRestore: @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void
+
     /// 指定アセットの動画を読み込み、再生を開始する。読み込み成否を返す。
     public var loadAndPlay: @Sendable (_ id: VideoAsset.ID) async -> Bool
 
@@ -44,6 +57,23 @@ public struct VideoPlayerProxy: Sendable {
 
     /// 再生を一時停止する。
     public var pause: @MainActor @Sendable () -> Void
+
+    /// 再生エンジンを完全停止し、再生アイテムを解放する（閉じる導線でのセッション破棄）。
+    ///
+    /// 一時停止に留まらず item を外して購読を解除する点で `pause` と異なる。再生を中断・破棄して
+    /// 元の状態を残さないために用いる。フレームワーク型の操作は `Infra` に隔離する。
+    public var stop: @MainActor @Sendable () -> Void
+
+    /// PIP（小窓）を停止する（閉じる導線でのセッション破棄）。
+    ///
+    /// 全停止の一環として PIP が起動していれば小窓を畳む。PIP 非対応・未起動なら何もしない。
+    public var stopPictureInPicture: @MainActor @Sendable () -> Void
+
+    /// オーディオセッションを非アクティブ化する（閉じる導線でのセッション破棄）。
+    ///
+    /// バックグラウンド再生・PIP 用に `prepareForBackgroundPlayback` でアクティブ化したセッションを
+    /// 解除する。プロセス外（システムのオーディオセッション）への設定は `Infra` に閉じる。
+    public var deactivateAudioSession: @MainActor @Sendable () -> Void
 
     /// 音声ミュートを切り替える（F-7）。
     public var setMuted: @MainActor @Sendable (_ muted: Bool) -> Void
@@ -75,9 +105,14 @@ public struct VideoPlayerProxy: Sendable {
         player: @escaping @MainActor @Sendable () -> AVPlayer? = { nil },
         attachPlayerLayer: @escaping @MainActor @Sendable (AVPlayerLayer) -> Void = { _ in },
         setPictureInPictureEnabled: @escaping @MainActor @Sendable (Bool) -> Void = { _ in },
+        startPictureInPicture: @escaping @MainActor @Sendable (_ onDidStart: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in },
+        observePictureInPictureRestore: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in },
         loadAndPlay: @escaping @Sendable (_ id: VideoAsset.ID) async -> Bool = { _ in false },
         play: @escaping @MainActor @Sendable () -> Void = {},
         pause: @escaping @MainActor @Sendable () -> Void = {},
+        stop: @escaping @MainActor @Sendable () -> Void = {},
+        stopPictureInPicture: @escaping @MainActor @Sendable () -> Void = {},
+        deactivateAudioSession: @escaping @MainActor @Sendable () -> Void = {},
         setMuted: @escaping @MainActor @Sendable (_ muted: Bool) -> Void = { _ in },
         setRate: @escaping @MainActor @Sendable (_ rate: Float) -> Void = { _ in },
         prepareForBackgroundPlayback: @escaping @MainActor @Sendable () -> Void = {},
@@ -88,9 +123,14 @@ public struct VideoPlayerProxy: Sendable {
         self.player = player
         self.attachPlayerLayer = attachPlayerLayer
         self.setPictureInPictureEnabled = setPictureInPictureEnabled
+        self.startPictureInPicture = startPictureInPicture
+        self.observePictureInPictureRestore = observePictureInPictureRestore
         self.loadAndPlay = loadAndPlay
         self.play = play
         self.pause = pause
+        self.stop = stop
+        self.stopPictureInPicture = stopPictureInPicture
+        self.deactivateAudioSession = deactivateAudioSession
         self.setMuted = setMuted
         self.setRate = setRate
         self.prepareForBackgroundPlayback = prepareForBackgroundPlayback

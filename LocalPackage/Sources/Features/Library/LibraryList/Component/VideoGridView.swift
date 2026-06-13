@@ -21,6 +21,9 @@ struct VideoGridView: View {
     /// 選択モード時のセルタップ。選択トグルを行う。
     let onToggleSelection: (VideoAsset) -> Void
 
+    /// 通常時のセルタップ。再生画面（F-2）のモーダル提示を呼び出し元へ委譲する。
+    let onSelect: (VideoAsset) -> Void
+
     private let columns = [GridItem(.adaptive(minimum: 100), spacing: 2)]
 
     var body: some View {
@@ -49,9 +52,11 @@ struct VideoGridView: View {
             }
             .buttonStyle(.plain)
         } else {
-            // 通常時はセルタップで再生画面（F-2）へ遷移する。遷移先は VideoLibraryView の
-            // navigationDestination(for: VideoAsset.self) で解決する。
-            NavigationLink(value: video) {
+            // 通常時はセルタップで再生画面（F-2）をモーダル提示する。提示の実体は
+            // VideoLibraryView の fullScreenCover で行い、ここでは選択を通知するだけ。
+            Button {
+                onSelect(video)
+            } label: {
                 VideoCellView(video: video)
                     .aspectRatio(1, contentMode: .fill)
             }
