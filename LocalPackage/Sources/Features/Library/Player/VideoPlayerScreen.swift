@@ -24,7 +24,6 @@ import SwiftUI
 struct VideoPlayerScreen: View {
 
     @Environment(PlaybackStore.self) private var playbackStore
-    @Environment(\.dismiss) private var dismiss
 
     /// 再生コントロールの表示・非表示と自動非表示タイマーを管理するドメインモデル。
     /// 表示制御ロジックは View に持たせず、このモデルへ委譲する。
@@ -44,7 +43,9 @@ struct VideoPlayerScreen: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button {
-                            dismiss()
+                            // 閉じる導線では再生・PIP・Now Playing をすべて止め、セッションを破棄する。
+                            // （isPlayerPresented = false でモーダルが閉じるため dismiss は不要）
+                            playbackStore.stop()
                         } label: {
                             Image(systemName: "xmark")
                         }
@@ -72,7 +73,8 @@ struct VideoPlayerScreen: View {
             onError(newValue)
         }
         .errorAlert(errorAlertStore) {
-            dismiss()
+            // エラー時の閉じる導線でも再生を残さず、セッションを完全停止・破棄する。
+            playbackStore.stop()
         }
     }
 

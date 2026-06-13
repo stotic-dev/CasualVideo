@@ -75,6 +75,15 @@ public final class PictureInPictureClient {
         #endif
     }
 
+    /// PIP（小窓）を停止する。閉じる導線での再生セッション破棄に用いる。
+    ///
+    /// PIP コントローラが存在すれば停止要求を送るだけに責務を限定する。iOS 以外（macOS）では no-op。
+    public func stopPictureInPicture() {
+        #if canImport(AVKit) && os(iOS)
+        controller?.stopPictureInPicture()
+        #endif
+    }
+
     /// PIP の「戻る（restore）」要求を購読する。復帰ボタンが押されるたびに `handler` が呼ばれる。
     ///
     /// `handler` は閉じていた UI（再生画面）を再提示する責務を担う。システムへの完了通知

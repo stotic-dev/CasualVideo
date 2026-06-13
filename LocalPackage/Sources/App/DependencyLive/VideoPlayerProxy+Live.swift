@@ -57,6 +57,12 @@ extension VideoPlayerProxy {
             },
             play: { playerClient.play() },
             pause: { playerClient.pause() },
+            // 閉じる導線での再生完全停止（item 解放・オブザーバ解除）を AVPlayer 窓口へ委譲。
+            stop: { playerClient.stop() },
+            // 閉じる導線での PIP 停止を PIP Client へ委譲。
+            stopPictureInPicture: { pictureInPictureClient.stopPictureInPicture() },
+            // 閉じる導線でのオーディオセッション非アクティブ化を Infra へ委譲。
+            deactivateAudioSession: { audioSession.deactivate() },
             setMuted: { playerClient.setMuted($0) },
             // 再生速度（F-7）を AVPlayer 窓口へ委譲。defaultRate により item 差し替え後も維持される。
             setRate: { playerClient.setRate($0) },

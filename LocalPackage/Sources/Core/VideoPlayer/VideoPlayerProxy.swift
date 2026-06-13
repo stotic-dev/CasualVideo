@@ -58,6 +58,23 @@ public struct VideoPlayerProxy: Sendable {
     /// 再生を一時停止する。
     public var pause: @MainActor @Sendable () -> Void
 
+    /// 再生エンジンを完全停止し、再生アイテムを解放する（閉じる導線でのセッション破棄）。
+    ///
+    /// 一時停止に留まらず item を外して購読を解除する点で `pause` と異なる。再生を中断・破棄して
+    /// 元の状態を残さないために用いる。フレームワーク型の操作は `Infra` に隔離する。
+    public var stop: @MainActor @Sendable () -> Void
+
+    /// PIP（小窓）を停止する（閉じる導線でのセッション破棄）。
+    ///
+    /// 全停止の一環として PIP が起動していれば小窓を畳む。PIP 非対応・未起動なら何もしない。
+    public var stopPictureInPicture: @MainActor @Sendable () -> Void
+
+    /// オーディオセッションを非アクティブ化する（閉じる導線でのセッション破棄）。
+    ///
+    /// バックグラウンド再生・PIP 用に `prepareForBackgroundPlayback` でアクティブ化したセッションを
+    /// 解除する。プロセス外（システムのオーディオセッション）への設定は `Infra` に閉じる。
+    public var deactivateAudioSession: @MainActor @Sendable () -> Void
+
     /// 音声ミュートを切り替える（F-7）。
     public var setMuted: @MainActor @Sendable (_ muted: Bool) -> Void
 
@@ -93,6 +110,9 @@ public struct VideoPlayerProxy: Sendable {
         loadAndPlay: @escaping @Sendable (_ id: VideoAsset.ID) async -> Bool = { _ in false },
         play: @escaping @MainActor @Sendable () -> Void = {},
         pause: @escaping @MainActor @Sendable () -> Void = {},
+        stop: @escaping @MainActor @Sendable () -> Void = {},
+        stopPictureInPicture: @escaping @MainActor @Sendable () -> Void = {},
+        deactivateAudioSession: @escaping @MainActor @Sendable () -> Void = {},
         setMuted: @escaping @MainActor @Sendable (_ muted: Bool) -> Void = { _ in },
         setRate: @escaping @MainActor @Sendable (_ rate: Float) -> Void = { _ in },
         prepareForBackgroundPlayback: @escaping @MainActor @Sendable () -> Void = {},
@@ -108,6 +128,9 @@ public struct VideoPlayerProxy: Sendable {
         self.loadAndPlay = loadAndPlay
         self.play = play
         self.pause = pause
+        self.stop = stop
+        self.stopPictureInPicture = stopPictureInPicture
+        self.deactivateAudioSession = deactivateAudioSession
         self.setMuted = setMuted
         self.setRate = setRate
         self.prepareForBackgroundPlayback = prepareForBackgroundPlayback

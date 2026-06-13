@@ -99,6 +99,26 @@ public final class PlaybackStore {
         }
     }
 
+    /// 閉じる導線で再生セッションを完全停止・破棄し、全画面プレイヤーを閉じる。
+    ///
+    /// 再生画面（モーダル）の閉じるボタン / エラー時の閉じる導線から呼ぶ。PIP へ移行する
+    /// `enterPictureInPicture()`（セッションを生存させる）とは対照的に、ここでは再生・PIP・
+    /// Now Playing Info をすべて止め、セッション（`playlistStore`）を空の新規 Store へ差し替えて
+    /// 破棄する（docs-internal/architecture.md「状態管理（Store）」の方針: 状態更新は公開 API 経由）。
+    public func stop() {
+        // PIP 小窓が出ていれば畳む → 再生エンジンを完全停止（item 解放）→
+        // Now Playing をクリア → オーディオセッションを非アクティブ化、の順で全停止する。
+        playerProxy.stopPictureInPicture()
+        playerProxy.stop()
+        nowPlayingInfoProxy.clearNowPlayingInfo()
+        playerProxy.deactivateAudioSession()
+        // セッションを破棄: 空の新規 PlaylistStore に差し替え、進行状態を未開始へ戻す。
+        playlistStore = PlaylistStore(playerProxy: playerProxy, nowPlayingInfoProxy: nowPlayingInfoProxy)
+        phase = .idle
+        // モーダルを閉じる（提示状態の非提示化）。
+        isPlayerPresented = false
+    }
+
     // MARK: - Private
 
     private func presentAndLoad(startIndex: Int, provider: @escaping () async -> [VideoAsset]) {
