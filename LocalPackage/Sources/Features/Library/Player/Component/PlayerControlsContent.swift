@@ -36,7 +36,11 @@ struct PlayerControlsContent: View {
 
     var body: some View {
         // 近接する Liquid Glass ボタン同士をブレンド・最適化するためコンテナで囲う。
-        GlassEffectContainer {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer {
+                controls
+            }
+        } else {
             controls
         }
     }
@@ -162,7 +166,7 @@ private extension PlayerControlsContent {
                 .padding(8)
         }
         // 速度選択 Menu も他のボタンと揃えて Liquid Glass を与える。
-        .buttonStyle(.glass)
+        .glassButtonStyle()
     }
 
     private func playerControlButton(content: () -> some View, action: @escaping () -> Void) -> some View {
@@ -174,7 +178,7 @@ private extension PlayerControlsContent {
                 .padding(8)
         }
         // コントロールの各ボタンに Liquid Glass を与える（iOS 26 / macOS 26）。
-        .buttonStyle(.glass)
+        .glassButtonStyle()
     }
 
     /// リピートモードに対応する SF Symbol 名。
