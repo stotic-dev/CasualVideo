@@ -9,6 +9,8 @@ import SwiftUI
 import Core
 
 struct PlayerControlsContent: View {
+    @Environment(\.castComponentResolver) var castComponentResolver
+    
     let progress: PlaybackProgress
     let playbackOrder: PlaybackOrder
     let repeatMode: RepeatMode
@@ -47,79 +49,11 @@ struct PlayerControlsContent: View {
 
     private var controls: some View {
         ZStack {
-            HStack(spacing: .zero) {
-                playerControlButton {
-                    Image(systemName: "xmark")
-                } action: {
-                    onClose()
-                }
-                Spacer()
-                // PIP へ遷移（F-3）。再生画面を閉じて PIP 小窓へ移行する。
-                playerControlButton {
-                    Image(systemName: "pip.enter")
-                } action: {
-                    onStartPictureInPicture()
-                }
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            HStack(spacing: .zero) {
-                playerControlButton {
-                    Image(systemName: "backward.fill")
-                } action: {
-                    Task { await onPlayPrevious() }
-                }
-                .disabled(!canPlayPrevious)
-                .foregroundStyle(.white)
-                Spacer()
-                // 再生 / 一時停止。セットアップ中はインジケーターへ差し替える。
-                playPauseControl
-                Spacer()
-                playerControlButton {
-                    Image(systemName: "forward.fill")
-                } action: {
-                    Task { await onPlayNext() }
-                }
-                .disabled(!canPlayNext)
-                .foregroundStyle(.white)
-            }
-            VStack(spacing: 24) {
-                // シーク操作・残り時間表示（F-6）。シーク可能な長さがあるときのみ表示する。
-                if progress.isSeekable {
-                    SeekBar(progress: progress, onSeek: onSeek)
-                        .padding(.bottom, 8)
-                }
-                HStack(spacing: 16) {
-                    Spacer()
-                    // ミュート切り替え（F-7）。ミュート時はアクセントカラーで状態を示す。
-                    playerControlButton {
-                        Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                    } action: {
-                        onToggleMute()
-                    }
-                    .foregroundStyle(isMuted ? Color.accentColor : .white)
-
-                    // 再生速度選択（F-7）。現在の速度をラベルに表示し、Menu から選択する。
-                    rateMenu
-
-                    // シャッフル切り替え（F-5）。有効時はアクセントカラーで状態を示す。
-                    playerControlButton {
-                        Image(systemName: "shuffle")
-                    } action: {
-                        onToggleShuffle()
-                    }
-                    .foregroundStyle(playbackOrder == .shuffle ? Color.accentColor : .white)
-                    // リピート切り替え（F-5: off → all → one → off）。off 以外でアクセントカラー、one は 1 を示すシンボル。
-                    playerControlButton {
-                        Image(systemName: repeatSymbolName)
-                    } action: {
-                        onCycleRepeat()
-                    }
-                    .foregroundStyle(repeatMode == .off ? Color.white : Color.accentColor)
-                }
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-            .frame(maxHeight: .infinity, alignment: .bottom)
+            headerControl
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            centerControl
+            bottomControl
+                .frame(maxHeight: .infinity, alignment: .bottom)
         }
         .padding(.horizontal, 32)
         .font(.title)
@@ -129,9 +63,94 @@ struct PlayerControlsContent: View {
 }
 
 private extension PlayerControlsContent {
+    var headerControl: some View {
+        HStack(spacing: .zero) {
+            playerControlButton {
+                Image(systemName: "xmark")
+            } action: {
+                onClose()
+            }
+            Spacer()
+            HStack(spacing: 8) {
+                castComponentResolver()
+                    .padding(8)
+                    .glassEffectStyle()
+                // PIP へ遷移（F-3）。再生画面を閉じて PIP 小窓へ移行する。
+                playerControlButton {
+                    Image(systemName: "pip.enter")
+                } action: {
+                    onStartPictureInPicture()
+                }
+            }
+        }
+        .foregroundStyle(.white)
+    }
+    
+    var centerControl: some View {
+        HStack(spacing: .zero) {
+            playerControlButton {
+                Image(systemName: "backward.fill")
+            } action: {
+                Task { await onPlayPrevious() }
+            }
+            .disabled(!canPlayPrevious)
+            .foregroundStyle(.white)
+            Spacer()
+            // 再生 / 一時停止。セットアップ中はインジケーターへ差し替える。
+            playPauseControl
+            Spacer()
+            playerControlButton {
+                Image(systemName: "forward.fill")
+            } action: {
+                Task { await onPlayNext() }
+            }
+            .disabled(!canPlayNext)
+            .foregroundStyle(.white)
+        }
+    }
+    
+    var bottomControl: some View {
+        VStack(spacing: 24) {
+            // シーク操作・残り時間表示（F-6）。シーク可能な長さがあるときのみ表示する。
+            if progress.isSeekable {
+                SeekBar(progress: progress, onSeek: onSeek)
+                    .padding(.bottom, 8)
+            }
+            HStack(spacing: 16) {
+                Spacer()
+                // ミュート切り替え（F-7）。ミュート時はアクセントカラーで状態を示す。
+                playerControlButton {
+                    Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                } action: {
+                    onToggleMute()
+                }
+                .foregroundStyle(isMuted ? Color.accentColor : .white)
+
+                // 再生速度選択（F-7）。現在の速度をラベルに表示し、Menu から選択する。
+                rateMenu
+
+                // シャッフル切り替え（F-5）。有効時はアクセントカラーで状態を示す。
+                playerControlButton {
+                    Image(systemName: "shuffle")
+                } action: {
+                    onToggleShuffle()
+                }
+                .foregroundStyle(playbackOrder == .shuffle ? Color.accentColor : .white)
+                // リピート切り替え（F-5: off → all → one → off）。off 以外でアクセントカラー、one は 1 を示すシンボル。
+                playerControlButton {
+                    Image(systemName: repeatSymbolName)
+                } action: {
+                    onCycleRepeat()
+                }
+                .foregroundStyle(repeatMode == .off ? Color.white : Color.accentColor)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+    
     /// 再生 / 一時停止ボタン。セットアップ中はインジケーターを表示する。
     @ViewBuilder
-    private var playPauseControl: some View {
+    var playPauseControl: some View {
         if isPreparingItem {
             ProgressView()
                 .tint(.white)

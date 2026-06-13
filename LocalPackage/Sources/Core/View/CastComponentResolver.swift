@@ -16,6 +16,11 @@ public struct CastComponentResolver: Sendable {
     ) {
         _resolve = { AnyView(resolve()) }
     }
+    
+    @MainActor
+    public func callAsFunction() -> AnyView {
+        _resolve()
+    }
 
 }
 
