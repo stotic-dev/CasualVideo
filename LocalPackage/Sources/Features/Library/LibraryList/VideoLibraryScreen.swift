@@ -44,19 +44,17 @@ struct VideoLibraryView: View {
     /// 未許可状態からの再試行アクション。副作用の実体は Screen 側にある。
     let onRetry: () async -> Void
 
+    /// アプリスコープの再生 Store。再生開始と全画面プレイヤーの提示はここへ委譲する。
+    @Environment(PlaybackStore.self) private var playbackStore
+
     /// 選択モード中かどうか（F-6 手動選択）。ビュー都合の状態のため presentational 側で保持する。
     @State private var isSelecting = false
 
     /// 選択中の動画 ID 集合。
     @State private var selectedIDs: Set<VideoAsset.ID> = []
 
-    /// 連続再生プレイリスト（全動画再生 / 手動選択再生）への遷移トリガ。
-    @State private var playlistRequest: PlaylistRequest?
-
-    /// セルタップで再生する動画。fullScreenCover の item として用いる（F-2）。
-    @State private var selectedVideo: VideoAsset?
-
     var body: some View {
+        @Bindable var playbackStore = playbackStore
         NavigationStack {
             content
                 .navigationTitle("動画")
@@ -70,17 +68,11 @@ struct VideoLibraryView: View {
                     SettingsScreen()
                 }
         }
-        // 一覧セルから選んだ動画（F-2）をモーダル（fullScreenCover）で再生する。
-        // F-4: 表示中の一覧全体をプレイリストとし、選択動画から連続再生する。
-        .playerCover(item: $selectedVideo) { asset in
-            VideoPlayerScreen(
-                playlist: playlist,
-                startIndex: playlist.firstIndex(of: asset) ?? 0
-            )
-        }
-        // 全動画再生 / 手動選択再生（F-6）。確定済みプレイリストをモーダルで再生する。
-        .playerCover(item: $playlistRequest) { request in
-            VideoPlayerScreen(playlist: request.videos)
+        // 再生 Store の提示状態に追従して全画面プレイヤー（モーダル）を提示する。
+        // 一覧セル / 全動画 / 手動選択 / アルバムの各起点はいずれも Store へ再生開始を委譲し、
+        // 提示はこの一箇所へ集約する。これにより PIP の「戻る」での復帰も同じ導線で行える。
+        .playerCover(isPresented: $playbackStore.isPlayerPresented) {
+            VideoPlayerScreen()
         }
     }
 
@@ -103,7 +95,7 @@ struct VideoLibraryView: View {
                 } else {
                     // 全動画再生（F-6 全動画=ライブラリ全体の明示的な導線）。
                     Button {
-                        playlistRequest = PlaylistRequest(videos: playlist)
+                        playbackStore.start(playlist: playlist)
                     } label: {
                         Label("全動画を再生", systemImage: "play.rectangle.on.rectangle")
                     }
@@ -135,7 +127,7 @@ struct VideoLibraryView: View {
     private func startSelectedPlayback() {
         let selected = playlist.filter { selectedIDs.contains($0.id) }
         guard !selected.isEmpty else { return }
-        playlistRequest = PlaylistRequest(videos: selected)
+        playbackStore.start(playlist: selected)
         exitSelectionMode()
     }
 
@@ -172,7 +164,8 @@ struct VideoLibraryView: View {
                 isSelecting: isSelecting,
                 selectedIDs: selectedIDs,
                 onToggleSelection: toggleSelection,
-                onSelect: { selectedVideo = $0 }
+                // 一覧セルから選んだ動画（F-2）を起点に、一覧全体をプレイリストとして連続再生する（F-4）。
+                onSelect: { playbackStore.start(playlist: playlist, startIndex: playlist.firstIndex(of: $0) ?? 0) }
             )
 
         case .unauthorized(let status):

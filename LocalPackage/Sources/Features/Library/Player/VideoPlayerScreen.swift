@@ -16,49 +16,23 @@
 import Core
 import SwiftUI
 
-/// プレイリストの全画面連続再生画面。一覧セルからの遷移先として用いる。
-public struct VideoPlayerScreen: View {
+/// プレイリストの全画面連続再生画面。`PlaybackStore` が保持する再生セッションを表示する。
+///
+/// 再生セッション（`PlaylistStore`）はアプリスコープの `PlaybackStore` が保持するため、
+/// この画面は提示・非提示（PIP への移行と復帰を含む）で破棄・再生成されても再生状態を失わない。
+/// 画面自体は副作用の起点を持たず、Store の状態を表示し操作を委譲するだけに留める。
+struct VideoPlayerScreen: View {
 
-    /// 連続再生の対象プレイリストを供給するプロバイダ。
-    ///
-    /// 固定一覧（全動画 / 手動選択）はそのまま返し、アルバム単位の場合は
-    /// 再生開始時に最新のアルバム内容を取得して返す（F-6 動的取得）。
-    let playlistProvider: () async -> [VideoAsset]
-
-    /// 再生を開始するインデックス。
-    let startIndex: Int
-
-    @Environment(\.videoPlayerProxy) private var playerProxy
-    @Environment(\.nowPlayingInfoProxy) private var nowPlayingInfoProxy
-    /// 再生デフォルト設定（ミュート・速度 / F-7）の共有 Store。設定画面と共有し、初期値の取得に用いる。
-    @Environment(SettingsStore.self) private var settingsStore
-    @Environment(\.dismiss) var dismiss
-
-    /// 再生リソースの読み込み状態（描画面のバインドは Proxy 経由で行うため、状態は進行のみを表す）。
-    @State private var state: VideoPlayerViewState = .loading
-
-    /// 連続再生の進行を管理する Store。再生画面のライフサイクルに紐づくため View 層で生成・保持する。
-    @State private var playlistStore: PlaylistStore?
+    @Environment(PlaybackStore.self) private var playbackStore
+    @Environment(\.dismiss) private var dismiss
 
     /// 再生コントロールの表示・非表示と自動非表示タイマーを管理するドメインモデル。
     /// 表示制御ロジックは View に持たせず、このモデルへ委譲する。
     @State private var controlsVisibility = PlaybackControlsVisibility()
-    
-    @State var errorAlertStore = ErrorAlertStore()
 
-    /// 固定のプレイリストで再生する（全動画 / 手動選択など、起動時点で確定する場合）。
-    public init(playlist: [VideoAsset], startIndex: Int = 0) {
-        self.playlistProvider = { playlist }
-        self.startIndex = startIndex
-    }
+    @State private var errorAlertStore = ErrorAlertStore()
 
-    /// 再生開始時にプレイリストを動的取得して再生する（アルバム単位 / F-6）。
-    public init(startIndex: Int = 0, playlistProvider: @escaping () async -> [VideoAsset]) {
-        self.playlistProvider = playlistProvider
-        self.startIndex = startIndex
-    }
-
-    public var body: some View {
+    var body: some View {
         // モーダル（fullScreenCover）提示のため、自前の NavigationStack で包み、
         // ナビゲーションバーへ閉じる導線（戻るボタンの代替）とタイトルを置く。
         NavigationStack {
@@ -83,97 +57,76 @@ public struct VideoPlayerScreen: View {
                 #endif
         }
         .task {
-            // ライフサイクルに紐づく副作用（読み込み・連続再生開始）は Screen 側に置く。
-            await onAppear()
+            // 提示のたび（PIP からの復帰を含む）に、再生可能ならコントロールを表示する。
+            if case .ready = state {
+                controlsVisibility.show()
+            }
         }
-        .onChange(of: playlistStore?.error) { _, newValue in
+        .onChange(of: playbackStore.phase) { _, newValue in
+            // 読み込み完了時にコントロールを表示し、自動非表示タイマーを開始する。
+            if case .ready = newValue {
+                controlsVisibility.show()
+            }
+        }
+        .onChange(of: store?.error) { _, newValue in
             onError(newValue)
         }
         .errorAlert(errorAlertStore) {
-            onDismiss()
+            dismiss()
+        }
+    }
+
+    /// 現在の連続再生 Store（`PlaybackStore` が保持する単一インスタンス）。
+    private var store: PlaylistStore? { playbackStore.playlistStore }
+
+    /// Store の進行状態を表示用の状態へ写像する。
+    private var state: VideoPlayerViewState {
+        switch playbackStore.phase {
+        case .idle, .loading: return .loading
+        case .ready: return .ready
+        case .failed: return .failed
         }
     }
 
     private var playerView: some View {
         VideoPlayerView(
             state: state,
-            position: playlistStore?.currentPosition,
-            totalCount: playlistStore?.totalCount ?? 0,
-            canPlayNext: playlistStore?.canPlayNext ?? false,
-            canPlayPrevious: playlistStore?.canPlayPrevious ?? false,
-            isPlaying: playlistStore?.isPlaying ?? false,
-            isPreparingItem: playlistStore?.isPreparingItem ?? false,
-            playbackOrder: playlistStore?.playbackOrder ?? .sequential,
-            repeatMode: playlistStore?.repeatMode ?? .off,
-            isMuted: playlistStore?.isMuted ?? false,
-            playbackRate: playlistStore?.playbackRate ?? .normal,
-            progress: playlistStore?.progress ?? PlaybackProgress(),
+            position: store?.currentPosition,
+            totalCount: store?.totalCount ?? 0,
+            canPlayNext: store?.canPlayNext ?? false,
+            canPlayPrevious: store?.canPlayPrevious ?? false,
+            isPlaying: store?.isPlaying ?? false,
+            isPreparingItem: store?.isPreparingItem ?? false,
+            playbackOrder: store?.playbackOrder ?? .sequential,
+            repeatMode: store?.repeatMode ?? .off,
+            isMuted: store?.isMuted ?? false,
+            playbackRate: store?.playbackRate ?? .normal,
+            progress: store?.progress ?? PlaybackProgress(),
             areControlsVisible: controlsVisibility.isVisible,
             onToggleControls: { controlsVisibility.toggle() },
-            onTogglePlayPause: { playlistStore?.togglePlayPause() },
-            onPlayNext: { await playlistStore?.playNext() },
-            onPlayPrevious: { await playlistStore?.playPrevious() },
-            onToggleShuffle: { playlistStore?.toggleShuffle() },
-            onCycleRepeat: { playlistStore?.cycleRepeatMode() },
-            onSeek: { playlistStore?.seek(to: $0) },
-            onToggleMute: { playlistStore?.toggleMute() },
-            onSelectRate: { playlistStore?.setPlaybackRate($0) },
-            // PIP（F-3）を開始し、実際に立ち上がってから再生画面（モーダル）を閉じる。
-            // 先に閉じると描画レイヤーが外れて PIP 遷移が中断されるため、開始完了を待つ。
-            onStartPictureInPicture: { playerProxy.startPictureInPicture { dismiss() } }
+            onTogglePlayPause: { store?.togglePlayPause() },
+            onPlayNext: { await store?.playNext() },
+            onPlayPrevious: { await store?.playPrevious() },
+            onToggleShuffle: { store?.toggleShuffle() },
+            onCycleRepeat: { store?.cycleRepeatMode() },
+            onSeek: { store?.seek(to: $0) },
+            onToggleMute: { store?.toggleMute() },
+            onSelectRate: { store?.setPlaybackRate($0) },
+            // PIP（F-3）へ移行する。Store が開始完了を待って全画面プレイヤーを閉じる。
+            onStartPictureInPicture: { playbackStore.enterPictureInPicture() }
         )
     }
 
     private var navigationTitle: String {
-        guard let date = playlistStore?.currentAsset?.creationDate else { return "再生" }
+        guard let date = store?.currentAsset?.creationDate else { return "再生" }
         return date.formatted(.dateTime.year().month().day())
     }
 }
 
 private extension VideoPlayerScreen {
-    /// Store へ連続再生を委譲し、読み込み状態を更新する。描画面のバインドは CustomVideoPlayer が Proxy 経由で行う。
-    func onAppear() async {
-        // 既に準備済みなら作り直さない（再表示時の二重ロード防止）。
-        if case .ready = state { return }
-
-        // プレイリストを供給する（アルバム単位は最新内容を動的取得する / F-6）。
-        let playlist = await playlistProvider()
-        guard !playlist.isEmpty else {
-            state = .failed
-            return
-        }
-
-        // PIP・バックグラウンド再生（F-3）のためのオーディオセッションを再生前に構成する。
-        playerProxy.prepareForBackgroundPlayback()
-
-        // 共有 Store が保持する再生デフォルト（ミュート・速度 / F-7）を初期値として適用する。
-        let settings = settingsStore.settings
-        let store = PlaylistStore(
-            playerProxy: playerProxy,
-            nowPlayingInfoProxy: nowPlayingInfoProxy,
-            isMuted: settings.isMuted,
-            playbackRate: settings.playbackRate
-        )
-        playlistStore = store
-        await store.start(playlist: playlist, from: startIndex)
-
-        // 再生開始できたか（=対象アセットが選択できたか）で readiness を判定する。
-        // 描画用の AVPlayer は取り出さず、CustomVideoPlayer が Proxy 経由で描画面を構成する。
-        state = store.currentAsset == nil ? .failed : .ready
-
-        // 読み込み完了（.ready）時はコントロールを表示し、自動非表示タイマーを開始する。
-        if case .ready = state {
-            controlsVisibility.show()
-        }
-    }
-    
     func onError(_ error: ErrorAlertItem?) {
-        guard let error = error else { return }
+        guard let error else { return }
         errorAlertStore.setItem(error)
-    }
-    
-    func onDismiss() {
-        dismiss()
     }
 }
 

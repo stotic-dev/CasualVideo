@@ -43,6 +43,12 @@ public struct VideoPlayerProxy: Sendable {
     /// PIP 非対応・開始不可の場合はコールバックは呼ばれない（no-op）。
     public var startPictureInPicture: @MainActor @Sendable (_ onDidStart: @escaping @MainActor @Sendable () -> Void) -> Void
 
+    /// PIP の「戻る（restore）」要求を購読する。PIP 小窓の復帰ボタンが押されるたびに handler が呼ばれる。
+    ///
+    /// PIP 開始時に閉じた再生画面（モーダル）を再提示して全画面表示へ戻すために用いる。
+    /// UI 復帰の指示（再提示）だけを担い、システムへの完了通知は Infra 側が代行する。
+    public var observePictureInPictureRestore: @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void
+
     /// 指定アセットの動画を読み込み、再生を開始する。読み込み成否を返す。
     public var loadAndPlay: @Sendable (_ id: VideoAsset.ID) async -> Bool
 
@@ -83,6 +89,7 @@ public struct VideoPlayerProxy: Sendable {
         attachPlayerLayer: @escaping @MainActor @Sendable (AVPlayerLayer) -> Void = { _ in },
         setPictureInPictureEnabled: @escaping @MainActor @Sendable (Bool) -> Void = { _ in },
         startPictureInPicture: @escaping @MainActor @Sendable (_ onDidStart: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in },
+        observePictureInPictureRestore: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable () -> Void) -> Void = { _ in },
         loadAndPlay: @escaping @Sendable (_ id: VideoAsset.ID) async -> Bool = { _ in false },
         play: @escaping @MainActor @Sendable () -> Void = {},
         pause: @escaping @MainActor @Sendable () -> Void = {},
@@ -97,6 +104,7 @@ public struct VideoPlayerProxy: Sendable {
         self.attachPlayerLayer = attachPlayerLayer
         self.setPictureInPictureEnabled = setPictureInPictureEnabled
         self.startPictureInPicture = startPictureInPicture
+        self.observePictureInPictureRestore = observePictureInPictureRestore
         self.loadAndPlay = loadAndPlay
         self.play = play
         self.pause = pause

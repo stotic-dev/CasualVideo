@@ -74,6 +74,17 @@ public final class PictureInPictureClient {
         controller.startPictureInPicture()
         #endif
     }
+
+    /// PIP の「戻る（restore）」要求を購読する。復帰ボタンが押されるたびに `handler` が呼ばれる。
+    ///
+    /// `handler` は閉じていた UI（再生画面）を再提示する責務を担う。システムへの完了通知
+    /// （`completionHandler(true)`）は再提示要求の直後に Infra 側で代行するため、`handler` は
+    /// 完了ハンドラを意識しない。
+    public func observePictureInPictureRestore(_ handler: @escaping @MainActor () -> Void) {
+        #if canImport(AVKit) && os(iOS)
+        delegate.onRestore = handler
+        #endif
+    }
 }
 
 #if canImport(AVKit) && os(iOS)
@@ -87,11 +98,30 @@ private final class PictureInPictureDelegate: NSObject, @MainActor AVPictureInPi
     /// PIP 開始完了時に一度だけ呼ぶ closure。
     var onDidStart: (@MainActor () -> Void)?
 
+    /// PIP の「戻る（restore）」要求時に呼ぶ closure。閉じていた UI の再提示を担う。
+    var onRestore: (@MainActor () -> Void)?
+
     func pictureInPictureControllerDidStartPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
         onDidStart?()
         onDidStart = nil
+    }
+
+    /// PIP 小窓の復帰ボタンが押されたときに呼ばれる。閉じていた UI を再提示し、完了を通知する。
+    ///
+    /// 再提示（`onRestore`）は状態更新（モーダル再提示）として行い、その直後に
+    /// `completionHandler(true)` を呼んでシステムへ UI 復帰の完了を伝える。
+    func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+    ) {
+        guard let onRestore else {
+            completionHandler(false)
+            return
+        }
+        onRestore()
+        completionHandler(true)
     }
 }
 #endif

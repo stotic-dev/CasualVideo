@@ -19,16 +19,24 @@ import SwiftUI
 struct AlbumListScreen: View {
 
     @Environment(\.videoLibraryRepository) private var repository
+    /// アプリスコープの再生 Store。アルバム単位の再生開始はここへ委譲する。
+    @Environment(PlaybackStore.self) private var playbackStore
     @State private var store: AlbumListStore?
 
     var body: some View {
-        AlbumListView(state: store.map { AlbumListViewState(loadState: $0.loadState) } ?? .loading)
-            .task {
-                // Repository は Environment 経由で取得し、Feature 内 Store を生成する。
-                let store = store ?? AlbumListStore(repository: repository)
-                self.store = store
-                await store.load()
+        AlbumListView(
+            state: store.map { AlbumListViewState(loadState: $0.loadState) } ?? .loading,
+            // アルバム単位の連続再生（F-6）。再生開始時に最新のアルバム内容を動的取得する。
+            onPlay: { album in
+                playbackStore.start { await repository.fetchVideosInAlbum(album.id) }
             }
+        )
+        .task {
+            // Repository は Environment 経由で取得し、Feature 内 Store を生成する。
+            let store = store ?? AlbumListStore(repository: repository)
+            self.store = store
+            await store.load()
+        }
     }
 }
 
@@ -36,18 +44,12 @@ struct AlbumListScreen: View {
 struct AlbumListView: View {
 
     let state: AlbumListViewState
-
-    /// 再生するアルバム。fullScreenCover の item として用いる（F-6）。
-    @State private var selectedAlbum: VideoAlbum?
+    /// アルバムの再生開始（F-6）。再生・提示の実体は呼び出し元（再生セッション）へ委譲する。
+    let onPlay: (VideoAlbum) -> Void
 
     var body: some View {
         content
             .navigationTitle("アルバム")
-            // アルバム単位の連続再生（F-6）をモーダル（fullScreenCover）で提示する。
-            // 再生開始時に最新のアルバム内容を動的取得する。
-            .playerCover(item: $selectedAlbum) { album in
-                AlbumPlayerScreen(album: album)
-            }
     }
 
     @ViewBuilder
@@ -67,7 +69,7 @@ struct AlbumListView: View {
         case .albums(let albums):
             List(albums) { album in
                 Button {
-                    selectedAlbum = album
+                    onPlay(album)
                 } label: {
                     AlbumRowView(album: album)
                 }
@@ -86,7 +88,8 @@ struct AlbumListView: View {
                 VideoAlbum(id: "2", title: "家族", videoCount: 5, thumbnailAssetID: "family"),
                 VideoAlbum(id: "3", title: "お気に入り", videoCount: 28, thumbnailAssetID: "favorites"),
                 VideoAlbum(id: "4", title: "", videoCount: 1, thumbnailAssetID: nil)
-            ])
+            ]),
+            onPlay: { _ in }
         )
     }
     .environment(\.isPreview, true)
@@ -94,14 +97,14 @@ struct AlbumListView: View {
 
 #Preview("空") {
     NavigationStack {
-        AlbumListView(state: .empty)
+        AlbumListView(state: .empty, onPlay: { _ in })
     }
     .environment(\.isPreview, true)
 }
 
 #Preview("読み込み中") {
     NavigationStack {
-        AlbumListView(state: .loading)
+        AlbumListView(state: .loading, onPlay: { _ in })
     }
     .environment(\.isPreview, true)
 }

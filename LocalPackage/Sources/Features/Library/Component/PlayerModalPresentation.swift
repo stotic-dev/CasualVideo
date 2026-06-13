@@ -25,4 +25,18 @@ extension View {
         sheet(item: item, content: content)
         #endif
     }
+
+    /// 再生画面を真偽フラグでモーダル提示する。iOS は全画面（fullScreenCover）、macOS は sheet。
+    ///
+    /// 再生 Store（`PlaybackStore`）の提示状態に追従させる用途で用いる。
+    func playerCover<Content: View>(
+        isPresented: Binding<Bool>,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        #if os(iOS)
+        fullScreenCover(isPresented: isPresented, content: content)
+        #else
+        sheet(isPresented: isPresented, content: content)
+        #endif
+    }
 }
