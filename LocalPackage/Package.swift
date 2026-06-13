@@ -40,6 +40,9 @@ let package = Package(
             targets: [libraryFeature.name]
         )
     ],
+    dependencies: [
+        .package(url: "https://github.com/SRGSSR/google-cast-sdk.git", exact: "4.8.4")
+    ],
     targets: [
         .target(
             name: app.name,
@@ -54,7 +57,10 @@ let package = Package(
             name: core.name
         ),
         .target(
-            name: infra.name
+            name: infra.name,
+            dependencies: [
+                .product(name: "GoogleCast", package: "google-cast-sdk")
+            ]
         ),
         .testTarget(
             name: libraryFeature.testTargetName!,

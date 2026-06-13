@@ -281,6 +281,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = CasualVideoIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = CasualVideo/CasualVideo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 56LYVN6DMF;
@@ -290,6 +291,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CasualVideo/Info.plist;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "CasualVideoは、ローカルネットワークを使用して、Wi-Fi 上の Cast 対応デバイスを検出します";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "保存されている動画を一覧表示・再生するために写真ライブラリへアクセスします。";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -330,6 +332,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = CasualVideoIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = CasualVideo/CasualVideo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 56LYVN6DMF;
@@ -339,6 +342,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CasualVideo/Info.plist;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "CasualVideoは、ローカルネットワークを使用して、Wi-Fi 上の Cast 対応デバイスを検出します";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "保存されている動画を一覧表示・再生するために写真ライブラリへアクセスします。";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
