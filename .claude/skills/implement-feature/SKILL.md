@@ -13,7 +13,7 @@ $ARGUMENTS
 
 ## 実装手順
 
-ルールの正本は `docs/architecture.md`。**着手前に必ず Read で読むこと。**
+ルールの正本は `docs-internal/architecture.md`。**着手前に必ず Read で読むこと。**
 
 ### 1. 配置するレイヤーを決める
 

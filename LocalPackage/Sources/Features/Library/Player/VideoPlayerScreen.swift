@@ -2,93 +2,214 @@
 //  VideoPlayerScreen.swift
 //  Library
 //
-//  一覧から選んだ動画を再生する再生画面（F-2）。
+//  一覧から選んだ動画を起点に、一覧全体をプレイリストとして連続再生する再生画面（F-2 / F-4 / F-5）。
 //
-//  Screen と presentational View の分離方針は docs/swiftui.md を参照。
-//  - Screen（VideoPlayerScreen）: 再生エンジンの操作（VideoPlayerProxy 経由）と、その副作用を担う。
-//    AVPlayer / AVPlayerItem を View 内で直接生成・操作せず、すべて Proxy へ委譲する
-//    （操作の責務は Infra の VideoPlayerClient に閉じ、UI 表示と分離する）。
-//  - View（VideoPlayerView）: 受け取った再生状態（VideoPlayerViewState）を表示するだけ。副作用を持たない。
+//  Screen と presentational View の分離方針は docs-internal/swiftui.md を参照。
+//  - Screen（VideoPlayerScreen）: 再生エンジンの操作（VideoPlayerProxy / PlaylistStore 経由）と副作用を担う。
+//    AVPlayer / AVPlayerItem を View 内で直接生成・操作せず、すべて Proxy / Store へ委譲する。
+//  - View（VideoPlayerView）: 受け取った再生状態（VideoPlayerViewState）と操作クロージャを表示するだけ。副作用を持たない。
+//
+//  連続再生（F-4）の進行管理（現在位置・次/前送り・再生終了での自動遷移）と
+//  シャッフル / リピート（F-5）の状態管理は Core の PlaylistStore が担う。
 //
 
-import AVFoundation
 import Core
 import SwiftUI
 
-/// 動画の全画面再生画面。一覧セルからのモーダル（fullScreenCover）提示先として用いる。
+/// プレイリストの全画面連続再生画面。一覧セルからの遷移先として用いる。
 public struct VideoPlayerScreen: View {
 
-    let asset: VideoAsset
-    /// 閉じる導線のアクション。モーダル提示元（VideoLibraryView）で選択状態をクリアする。
-    let onClose: () -> Void
+    /// 連続再生の対象プレイリストを供給するプロバイダ。
+    ///
+    /// 固定一覧（全動画 / 手動選択）はそのまま返し、アルバム単位の場合は
+    /// 再生開始時に最新のアルバム内容を取得して返す（F-6 動的取得）。
+    let playlistProvider: () async -> [VideoAsset]
+
+    /// 再生を開始するインデックス。
+    let startIndex: Int
 
     @Environment(\.videoPlayerProxy) private var playerProxy
+    @Environment(\.nowPlayingInfoProxy) private var nowPlayingInfoProxy
+    /// 再生デフォルト設定（ミュート・速度 / F-7）の共有 Store。設定画面と共有し、初期値の取得に用いる。
+    @Environment(SettingsStore.self) private var settingsStore
+    @Environment(\.dismiss) var dismiss
+
+    /// 再生リソースの読み込み状態（描画面のバインドは Proxy 経由で行うため、状態は進行のみを表す）。
     @State private var state: VideoPlayerViewState = .loading
 
-    public init(asset: VideoAsset, onClose: @escaping () -> Void) {
-        self.asset = asset
-        self.onClose = onClose
+    /// 連続再生の進行を管理する Store。再生画面のライフサイクルに紐づくため View 層で生成・保持する。
+    @State private var playlistStore: PlaylistStore?
+
+    /// 再生コントロールの表示・非表示と自動非表示タイマーを管理するドメインモデル。
+    /// 表示制御ロジックは View に持たせず、このモデルへ委譲する。
+    @State private var controlsVisibility = PlaybackControlsVisibility()
+    
+    @State var errorAlertStore = ErrorAlertStore()
+
+    /// 固定のプレイリストで再生する（全動画 / 手動選択など、起動時点で確定する場合）。
+    public init(playlist: [VideoAsset], startIndex: Int = 0) {
+        self.playlistProvider = { playlist }
+        self.startIndex = startIndex
+    }
+
+    /// 再生開始時にプレイリストを動的取得して再生する（アルバム単位 / F-6）。
+    public init(startIndex: Int = 0, playlistProvider: @escaping () async -> [VideoAsset]) {
+        self.playlistProvider = playlistProvider
+        self.startIndex = startIndex
     }
 
     public var body: some View {
+        // モーダル（fullScreenCover）提示のため、自前の NavigationStack で包み、
+        // ナビゲーションバーへ閉じる導線（戻るボタンの代替）とタイトルを置く。
         NavigationStack {
             playerView
                 .navigationTitle(navigationTitle)
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
                 .toolbar {
-                    // モーダルには戻るボタンがないため、明示的な閉じる導線を置く。
                     ToolbarItem(placement: .cancellationAction) {
                         Button {
-                            onClose()
+                            dismiss()
                         } label: {
                             Image(systemName: "xmark")
                         }
                     }
                 }
+                #if os(iOS)
+                // コントロールの表示・非表示にナビゲーションバーも追従させ、没入感を保つ。
+                .toolbar(controlsVisibility.isVisible ? .visible : .hidden, for: .navigationBar)
+                .animation(.easeInOut(duration: 0.2), value: controlsVisibility.isVisible)
+                #endif
         }
         .task {
-            // ライフサイクルに紐づく副作用（読み込み・再生開始）は Screen 側に置く。
-            await start()
+            // ライフサイクルに紐づく副作用（読み込み・連続再生開始）は Screen 側に置く。
+            await onAppear()
         }
-        .onDisappear {
-            // 画面を離れたら再生を止める（操作は Proxy 経由）。
-            playerProxy.pause()
+        .onChange(of: playlistStore?.error) { _, newValue in
+            onError(newValue)
+        }
+        .errorAlert(errorAlertStore) {
+            onDismiss()
         }
     }
 
     private var playerView: some View {
-        let view = VideoPlayerView(state: state)
-        #if os(iOS)
-        return view.navigationBarTitleDisplayMode(.inline)
-        #else
-        return view
-        #endif
+        VideoPlayerView(
+            state: state,
+            position: playlistStore?.currentPosition,
+            totalCount: playlistStore?.totalCount ?? 0,
+            canPlayNext: playlistStore?.canPlayNext ?? false,
+            canPlayPrevious: playlistStore?.canPlayPrevious ?? false,
+            isPlaying: playlistStore?.isPlaying ?? false,
+            isPreparingItem: playlistStore?.isPreparingItem ?? false,
+            playbackOrder: playlistStore?.playbackOrder ?? .sequential,
+            repeatMode: playlistStore?.repeatMode ?? .off,
+            isMuted: playlistStore?.isMuted ?? false,
+            playbackRate: playlistStore?.playbackRate ?? .normal,
+            progress: playlistStore?.progress ?? PlaybackProgress(),
+            areControlsVisible: controlsVisibility.isVisible,
+            onToggleControls: { controlsVisibility.toggle() },
+            onTogglePlayPause: { playlistStore?.togglePlayPause() },
+            onPlayNext: { await playlistStore?.playNext() },
+            onPlayPrevious: { await playlistStore?.playPrevious() },
+            onToggleShuffle: { playlistStore?.toggleShuffle() },
+            onCycleRepeat: { playlistStore?.cycleRepeatMode() },
+            onSeek: { playlistStore?.seek(to: $0) },
+            onToggleMute: { playlistStore?.toggleMute() },
+            onSelectRate: { playlistStore?.setPlaybackRate($0) }
+        )
     }
 
     private var navigationTitle: String {
-        guard let date = asset.creationDate else { return "再生" }
+        guard let date = playlistStore?.currentAsset?.creationDate else { return "再生" }
         return date.formatted(.dateTime.year().month().day())
-    }
-
-    /// Proxy へ読み込み・再生を委譲し、描画用の AVPlayer を受け取って表示状態を更新する。
-    private func start() async {
-        // 既に準備済みなら作り直さない（再表示時の二重ロード防止）。
-        if case .ready = state { return }
-
-        // ラフに「とりあえず流す」体験のため、読み込みと同時に自動再生する。
-        let didLoad = await playerProxy.loadAndPlay(asset.id)
-        guard didLoad, let player = playerProxy.player() else {
-            state = .failed
-            return
-        }
-        // player は描画（AVPlayerLayer へのバインド）にのみ使う。操作は Proxy 経由。
-        state = .ready(player)
     }
 }
 
-/// 再生画面の presentational View。init で受け取った再生状態を表示するだけで副作用を持たない。
+private extension VideoPlayerScreen {
+    /// Store へ連続再生を委譲し、読み込み状態を更新する。描画面のバインドは CustomVideoPlayer が Proxy 経由で行う。
+    func onAppear() async {
+        // 既に準備済みなら作り直さない（再表示時の二重ロード防止）。
+        if case .ready = state { return }
+
+        // プレイリストを供給する（アルバム単位は最新内容を動的取得する / F-6）。
+        let playlist = await playlistProvider()
+        guard !playlist.isEmpty else {
+            state = .failed
+            return
+        }
+
+        // PIP・バックグラウンド再生（F-3）のためのオーディオセッションを再生前に構成する。
+        playerProxy.prepareForBackgroundPlayback()
+
+        // 共有 Store が保持する再生デフォルト（ミュート・速度 / F-7）を初期値として適用する。
+        let settings = settingsStore.settings
+        let store = PlaylistStore(
+            playerProxy: playerProxy,
+            nowPlayingInfoProxy: nowPlayingInfoProxy,
+            isMuted: settings.isMuted,
+            playbackRate: settings.playbackRate
+        )
+        playlistStore = store
+        await store.start(playlist: playlist, from: startIndex)
+
+        // 再生開始できたか（=対象アセットが選択できたか）で readiness を判定する。
+        // 描画用の AVPlayer は取り出さず、CustomVideoPlayer が Proxy 経由で描画面を構成する。
+        state = store.currentAsset == nil ? .failed : .ready
+
+        // 読み込み完了（.ready）時はコントロールを表示し、自動非表示タイマーを開始する。
+        if case .ready = state {
+            controlsVisibility.show()
+        }
+    }
+    
+    func onError(_ error: ErrorAlertItem?) {
+        guard let error = error else { return }
+        errorAlertStore.setItem(error)
+    }
+    
+    func onDismiss() {
+        dismiss()
+    }
+}
+
+/// 再生画面の presentational View。init で受け取った状態・操作クロージャを表示するだけで副作用を持たない。
 struct VideoPlayerView: View {
 
     let state: VideoPlayerViewState
+    /// 現在の再生位置（1 始まり）。プレイリストが 1 件以下なら nil で非表示。
+    let position: Int?
+    let totalCount: Int
+    let canPlayNext: Bool
+    let canPlayPrevious: Bool
+    /// 現在再生中かどうか（再生/一時停止ボタンの表示切り替えに用いる）。
+    let isPlaying: Bool
+    /// PlayerItem セットアップ中かどうか。true の間はコントロールを非活性化しインジケーターを表示する。
+    let isPreparingItem: Bool
+    let playbackOrder: PlaybackOrder
+    let repeatMode: RepeatMode
+    /// 音声ミュート中かどうか（F-7）。
+    let isMuted: Bool
+    /// 現在の再生速度（F-7）。
+    let playbackRate: PlaybackRate
+    /// 現在再生中アイテムの再生進捗（シークバーの位置・長さ表示に用いる）。
+    let progress: PlaybackProgress
+    /// 再生コントロールを表示中かどうか。タップでトグルされ、一定時間後に自動で非表示になる。
+    let areControlsVisible: Bool
+    /// 画面タップによるコントロール表示・非表示のトグル。
+    let onToggleControls: () -> Void
+    let onTogglePlayPause: () -> Void
+    let onPlayNext: () async -> Void
+    let onPlayPrevious: () async -> Void
+    let onToggleShuffle: () -> Void
+    let onCycleRepeat: () -> Void
+    /// シークバー操作による再生位置変更（指定秒へシーク）。
+    let onSeek: (TimeInterval) -> Void
+    /// ミュート切り替え（F-7）。
+    let onToggleMute: () -> Void
+    /// 再生速度選択（F-7）。
+    let onSelectRate: (PlaybackRate) -> Void
 
     var body: some View {
         content
@@ -103,10 +224,45 @@ struct VideoPlayerView: View {
         case .loading:
             ProgressView()
                 .tint(.white)
-
-        case .ready(let player):
-            CustomVideoPlayer(player: player)
-
+            
+        case .ready:
+            CustomVideoPlayer()
+            // 画面タップでコントロールの表示・非表示をトグルする。
+                .contentShape(.rect)
+                .onTapGesture { onToggleControls() }
+                .overlay(alignment: .top) {
+                    if totalCount > 1, let position, areControlsVisible {
+                        Text("\(position) / \(totalCount)")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(8)
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    if totalCount >= 1, areControlsVisible {
+                        PlayerControlsContent(
+                            progress: progress,
+                            playbackOrder: playbackOrder,
+                            repeatMode: repeatMode,
+                            canPlayPrevious: canPlayPrevious,
+                            canPlayNext: canPlayNext,
+                            isPreparingItem: isPreparingItem,
+                            isPlaying: isPlaying,
+                            isMuted: isMuted,
+                            playbackRate: playbackRate,
+                            onSeek: onSeek,
+                            onPlayPrevious: onPlayPrevious,
+                            onPlayNext: onPlayNext,
+                            onToggleShuffle: onToggleShuffle,
+                            onCycleRepeat: onCycleRepeat,
+                            onTogglePlayPause: onTogglePlayPause,
+                            onToggleMute: onToggleMute,
+                            onSelectRate: onSelectRate
+                        )
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: areControlsVisible)
+            
         case .failed:
             ContentUnavailableView(
                 "再生できません",
@@ -116,3 +272,51 @@ struct VideoPlayerView: View {
         }
     }
 }
+
+#if DEBUG
+@MainActor
+private func previewVideoPlayerView(
+    state: VideoPlayerViewState = .ready,
+    position: Int? = 2,
+    totalCount: Int = 5,
+    isPlaying: Bool = true,
+    isPreparingItem: Bool = false,
+    playbackOrder: PlaybackOrder = .sequential,
+    repeatMode: RepeatMode = .off,
+    isMuted: Bool = false,
+    playbackRate: PlaybackRate = .normal,
+    progress: PlaybackProgress = PlaybackProgress(currentTime: 42, duration: 215),
+    areControlsVisible: Bool = true
+) -> some View {
+    VideoPlayerView(
+        state: state,
+        position: position,
+        totalCount: totalCount,
+        canPlayNext: true,
+        canPlayPrevious: true,
+        isPlaying: isPlaying,
+        isPreparingItem: isPreparingItem,
+        playbackOrder: playbackOrder,
+        repeatMode: repeatMode,
+        isMuted: isMuted,
+        playbackRate: playbackRate,
+        progress: progress,
+        areControlsVisible: areControlsVisible,
+        onToggleControls: {},
+        onTogglePlayPause: {},
+        onPlayNext: {},
+        onPlayPrevious: {},
+        onToggleShuffle: {},
+        onCycleRepeat: {},
+        onSeek: { _ in },
+        onToggleMute: {},
+        onSelectRate: { _ in }
+    )
+    .environment(\.isPreview, true)
+}
+
+#Preview {
+    previewVideoPlayerView()
+}
+
+#endif

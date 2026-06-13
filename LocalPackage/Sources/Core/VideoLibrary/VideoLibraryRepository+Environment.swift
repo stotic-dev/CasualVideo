@@ -23,6 +23,8 @@ extension VideoLibraryRepository {
         authorizationStatus: { .notDetermined },
         requestAuthorization: { .denied },
         fetchVideos: { [] },
+        fetchAlbums: { [] },
+        fetchVideosInAlbum: { _ in [] },
         loadThumbnail: { _, _ in nil }
     )
 }

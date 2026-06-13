@@ -35,6 +35,10 @@ let package = Package(
             name: "App",
             targets: ["App"]
         ),
+        .library(
+            name: libraryFeature.name,
+            targets: [libraryFeature.name]
+        )
     ],
     targets: [
         .target(

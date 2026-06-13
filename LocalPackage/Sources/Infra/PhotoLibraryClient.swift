@@ -28,6 +28,17 @@ public struct PhotoVideoAsset: Sendable, Hashable {
     public let isInCloud: Bool
 }
 
+/// 写真ライブラリ上のアルバム（コレクション）の正規化済み情報。
+///
+/// `Core` のドメインモデルへの変換は `App`（assemble 層）が担う。
+public struct PhotoVideoAlbum: Sendable, Hashable {
+    public let localIdentifier: String
+    public let title: String
+    public let videoCount: Int
+    /// アルバムを代表するサムネイル用アセット（通常は最新の動画）の識別子。取得できない場合は nil。
+    public let thumbnailLocalIdentifier: String?
+}
+
 /// 写真ライブラリへのアクセス許可状態（PhotoKit 由来）。
 public enum PhotoLibraryAuthorization: Sendable, Hashable {
     case notDetermined
@@ -76,6 +87,75 @@ public struct PhotoLibraryClient: Sendable {
             )
         }
         return assets
+    }
+
+    /// 動画を含むアルバム（ユーザー作成アルバム + スマートアルバム）一覧を取得する（F-6）。
+    ///
+    /// 各アルバム内の動画件数を数え、動画を 1 件以上含むアルバムのみを返す。
+    public func fetchAlbums() -> [PhotoVideoAlbum] {
+        var albums: [PhotoVideoAlbum] = []
+
+        let collectionResults = [
+            PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil),
+            PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .any, options: nil)
+        ]
+
+        for result in collectionResults {
+            result.enumerateObjects { collection, _, _ in
+                let summary = Self.videoSummary(in: collection)
+                guard summary.count > 0 else { return }
+                albums.append(
+                    PhotoVideoAlbum(
+                        localIdentifier: collection.localIdentifier,
+                        title: collection.localizedTitle ?? "",
+                        videoCount: summary.count,
+                        thumbnailLocalIdentifier: summary.thumbnailLocalIdentifier
+                    )
+                )
+            }
+        }
+        return albums
+    }
+
+    /// 指定アルバム内の動画アセットを撮影日の新しい順で取得する（F-6 動的取得）。
+    ///
+    /// 再生開始時に呼ぶことで、最新のアルバム内容を反映する。
+    public func fetchVideos(inAlbum albumLocalIdentifier: String) -> [PhotoVideoAsset] {
+        let collectionFetch = PHAssetCollection.fetchAssetCollections(
+            withLocalIdentifiers: [albumLocalIdentifier],
+            options: nil
+        )
+        guard let collection = collectionFetch.firstObject else { return [] }
+
+        let options = PHFetchOptions()
+        options.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.video.rawValue)
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+
+        let result = PHAsset.fetchAssets(in: collection, options: options)
+        var assets: [PhotoVideoAsset] = []
+        assets.reserveCapacity(result.count)
+        result.enumerateObjects { asset, _, _ in
+            assets.append(
+                PhotoVideoAsset(
+                    localIdentifier: asset.localIdentifier,
+                    duration: asset.duration,
+                    creationDate: asset.creationDate,
+                    isInCloud: !asset.isLocallyAvailable
+                )
+            )
+        }
+        return assets
+    }
+
+    /// 指定コレクション内の動画アセット数と、代表サムネイル用アセット（最新の動画）の識別子を返す。
+    private static func videoSummary(
+        in collection: PHAssetCollection
+    ) -> (count: Int, thumbnailLocalIdentifier: String?) {
+        let options = PHFetchOptions()
+        options.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.video.rawValue)
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        let result = PHAsset.fetchAssets(in: collection, options: options)
+        return (result.count, result.firstObject?.localIdentifier)
     }
 
     /// 指定アセットのサムネイルを非同期に取得する。iCloud 上の動画も取得対象とする。

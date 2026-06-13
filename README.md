@@ -103,7 +103,7 @@ ApplicationTarget ──> App ──┬──> Features/<Feature> ──> Core
 - **DI は SwiftUI の `EnvironmentValues` 経由**: View 側は `@Environment` で取り出して利用
 - **状態管理（Store）**: `@Observable` + `@MainActor` な `final class`。状態はカプセル化し、公開 API 経由でのみ共有・更新。Store もオブジェクト型ベースの `.environment(_:)` / `@Environment(_:)` で DI
 
-詳細は [docs/architecture.md](docs/architecture.md) を参照してください。
+詳細は [docs-internal/architecture.md](docs-internal/architecture.md) を参照してください。
 
 ## 画面構成（たたき台）
 
@@ -145,7 +145,7 @@ xcodebuild -scheme CoreTests -destination 'platform=iOS Simulator,name=iPhone 16
 - テスト対象: `Core` のドメインモデル / UseCase、`Features` 内のドメインモデル
 - `Repository` は struct（振る舞いをクロージャで保持）のため、テストではクロージャを差し替えたインスタンスを注入する。protocol のモック型は作らない
 
-詳細は [docs/testing.md](docs/testing.md) を参照してください。
+詳細は [docs-internal/testing.md](docs-internal/testing.md) を参照してください。
 
 ## プライバシー
 
@@ -154,7 +154,7 @@ xcodebuild -scheme CoreTests -destination 'platform=iOS Simulator,name=iPhone 16
 
 ## ドキュメント
 
-- [docs/requirements.md](docs/requirements.md) — 要件定義書
-- [docs/architecture.md](docs/architecture.md) — アーキテクチャルール
-- [docs/testing.md](docs/testing.md) — テスト方針
+- [docs-internal/requirements.md](docs-internal/requirements.md) — 要件定義書
+- [docs-internal/architecture.md](docs-internal/architecture.md) — アーキテクチャルール
+- [docs-internal/testing.md](docs-internal/testing.md) — テスト方針
 - [CLAUDE.md](CLAUDE.md) — Claude Code 向けの開発ガイド
