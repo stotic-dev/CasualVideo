@@ -42,10 +42,12 @@ public final class PlaybackStore {
         case failed
     }
 
-    /// 現在の連続再生 Store。再生中（全画面 / PIP のいずれか）は非 nil。
+    /// 現在の連続再生 Store。
     ///
+    /// 未再生時は空の Store（`totalCount == 0`）を保持し、`start()` のたびに実プレイリストの
+    /// Store へ差し替える。常に非 nil とすることで、表示側（`VideoPlayerScreen`）の optional 連鎖を避ける。
     /// `PlaylistStore` は Feature 内部の型のため、この Store も Library 内に閉じて公開する（internal）。
-    private(set) var playlistStore: PlaylistStore?
+    private(set) var playlistStore: PlaylistStore
 
     /// 再生セッションの進行状態。
     public private(set) var phase: Phase = .idle
@@ -68,6 +70,8 @@ public final class PlaybackStore {
         self.playerProxy = playerProxy
         self.nowPlayingInfoProxy = nowPlayingInfoProxy
         self.settingsStore = settingsStore
+        // 未再生時の空セッション。start() で実プレイリストの Store に差し替える。
+        self.playlistStore = PlaylistStore(playerProxy: playerProxy, nowPlayingInfoProxy: nowPlayingInfoProxy)
 
         // PIP の「戻る」で全画面プレイヤーへ復帰する。セッション（playlistStore）は生存しているため、
         // 再提示するだけで再生を中断せず元の状態（位置・順序）から続けられる。
@@ -113,16 +117,16 @@ public final class PlaybackStore {
             }
             // 共有 Store が保持する再生デフォルト（ミュート・速度 / F-7）を初期値として適用する。
             let settings = settingsStore.settings
-            let playlistStore = PlaylistStore(
+            let store = PlaylistStore(
                 playerProxy: playerProxy,
                 nowPlayingInfoProxy: nowPlayingInfoProxy,
                 isMuted: settings.isMuted,
                 playbackRate: settings.playbackRate
             )
-            self.playlistStore = playlistStore
-            await playlistStore.start(playlist: playlist, from: startIndex)
+            playlistStore = store
+            await store.start(playlist: playlist, from: startIndex)
             // 再生開始できたか（=対象アセットが選択できたか）で readiness を判定する。
-            phase = playlistStore.currentAsset == nil ? .failed : .ready
+            phase = store.currentAsset == nil ? .failed : .ready
         }
     }
 }

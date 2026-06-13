@@ -68,7 +68,7 @@ struct VideoPlayerScreen: View {
                 controlsVisibility.show()
             }
         }
-        .onChange(of: store?.error) { _, newValue in
+        .onChange(of: store.error) { _, newValue in
             onError(newValue)
         }
         .errorAlert(errorAlertStore) {
@@ -76,8 +76,8 @@ struct VideoPlayerScreen: View {
         }
     }
 
-    /// 現在の連続再生 Store（`PlaybackStore` が保持する単一インスタンス）。
-    private var store: PlaylistStore? { playbackStore.playlistStore }
+    /// 現在の連続再生 Store（`PlaybackStore` が保持する単一インスタンス。常に非 nil）。
+    private var store: PlaylistStore { playbackStore.playlistStore }
 
     /// Store の進行状態を表示用の状態へ写像する。
     private var state: VideoPlayerViewState {
@@ -91,34 +91,34 @@ struct VideoPlayerScreen: View {
     private var playerView: some View {
         VideoPlayerView(
             state: state,
-            position: store?.currentPosition,
-            totalCount: store?.totalCount ?? 0,
-            canPlayNext: store?.canPlayNext ?? false,
-            canPlayPrevious: store?.canPlayPrevious ?? false,
-            isPlaying: store?.isPlaying ?? false,
-            isPreparingItem: store?.isPreparingItem ?? false,
-            playbackOrder: store?.playbackOrder ?? .sequential,
-            repeatMode: store?.repeatMode ?? .off,
-            isMuted: store?.isMuted ?? false,
-            playbackRate: store?.playbackRate ?? .normal,
-            progress: store?.progress ?? PlaybackProgress(),
+            position: store.currentPosition,
+            totalCount: store.totalCount,
+            canPlayNext: store.canPlayNext,
+            canPlayPrevious: store.canPlayPrevious,
+            isPlaying: store.isPlaying,
+            isPreparingItem: store.isPreparingItem,
+            playbackOrder: store.playbackOrder,
+            repeatMode: store.repeatMode,
+            isMuted: store.isMuted,
+            playbackRate: store.playbackRate,
+            progress: store.progress,
             areControlsVisible: controlsVisibility.isVisible,
             onToggleControls: { controlsVisibility.toggle() },
-            onTogglePlayPause: { store?.togglePlayPause() },
-            onPlayNext: { await store?.playNext() },
-            onPlayPrevious: { await store?.playPrevious() },
-            onToggleShuffle: { store?.toggleShuffle() },
-            onCycleRepeat: { store?.cycleRepeatMode() },
-            onSeek: { store?.seek(to: $0) },
-            onToggleMute: { store?.toggleMute() },
-            onSelectRate: { store?.setPlaybackRate($0) },
+            onTogglePlayPause: { store.togglePlayPause() },
+            onPlayNext: { await store.playNext() },
+            onPlayPrevious: { await store.playPrevious() },
+            onToggleShuffle: { store.toggleShuffle() },
+            onCycleRepeat: { store.cycleRepeatMode() },
+            onSeek: { store.seek(to: $0) },
+            onToggleMute: { store.toggleMute() },
+            onSelectRate: { store.setPlaybackRate($0) },
             // PIP（F-3）へ移行する。Store が開始完了を待って全画面プレイヤーを閉じる。
             onStartPictureInPicture: { playbackStore.enterPictureInPicture() }
         )
     }
 
     private var navigationTitle: String {
-        guard let date = store?.currentAsset?.creationDate else { return "再生" }
+        guard let date = store.currentAsset?.creationDate else { return "再生" }
         return date.formatted(.dateTime.year().month().day())
     }
 }

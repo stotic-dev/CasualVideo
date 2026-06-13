@@ -56,10 +56,10 @@ struct PlaybackStoreTests {
         #expect(playbackStore.isPlayerPresented)
         #expect(playbackStore.phase == .loading)
 
-        // Assert: 読み込み完了で ready になり、連続再生 Store が生成される。
+        // Assert: 読み込み完了で ready になり、連続再生 Store に再生対象が反映される。
         await waitUntil { playbackStore.phase != .loading }
         #expect(playbackStore.phase == .ready)
-        #expect(playbackStore.playlistStore?.currentAsset?.id == "b")
+        #expect(playbackStore.playlistStore.currentAsset?.id == "b")
     }
 
     @Test("空のプレイリストで start すると failed になる")
@@ -70,10 +70,10 @@ struct PlaybackStoreTests {
         // Act
         playbackStore.start(playlist: [])
 
-        // Assert
+        // Assert: 空プレイリストでは failed になり、Store は差し替えられず空のまま。
         await waitUntil { playbackStore.phase != .loading }
         #expect(playbackStore.phase == .failed)
-        #expect(playbackStore.playlistStore == nil)
+        #expect(playbackStore.playlistStore.totalCount == 0)
     }
 
     // MARK: - enterPictureInPicture()
