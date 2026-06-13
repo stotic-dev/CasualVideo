@@ -32,50 +32,26 @@ struct VideoPlayerScreen: View {
     @State private var errorAlertStore = ErrorAlertStore()
 
     var body: some View {
-        // モーダル（fullScreenCover）提示のため、自前の NavigationStack で包み、
-        // ナビゲーションバーへ閉じる導線（戻るボタンの代替）とタイトルを置く。
-        NavigationStack {
-            playerView
-                .navigationTitle(navigationTitle)
-                #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-                #endif
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button {
-                            // 閉じる導線では再生・PIP・Now Playing をすべて止め、セッションを破棄する。
-                            // （isPlayerPresented = false でモーダルが閉じるため dismiss は不要）
-                            playbackStore.stop()
-                        } label: {
-                            Image(systemName: "xmark")
-                        }
-                    }
+        playerView
+            .task {
+                // 提示のたび（PIP からの復帰を含む）に、再生可能ならコントロールを表示する。
+                if case .ready = state {
+                    controlsVisibility.show()
                 }
-                #if os(iOS)
-                // コントロールの表示・非表示にナビゲーションバーも追従させ、没入感を保つ。
-                .toolbar(controlsVisibility.isVisible ? .visible : .hidden, for: .navigationBar)
-                .animation(.easeInOut(duration: 0.2), value: controlsVisibility.isVisible)
-                #endif
-        }
-        .task {
-            // 提示のたび（PIP からの復帰を含む）に、再生可能ならコントロールを表示する。
-            if case .ready = state {
-                controlsVisibility.show()
             }
-        }
-        .onChange(of: playbackStore.phase) { _, newValue in
-            // 読み込み完了時にコントロールを表示し、自動非表示タイマーを開始する。
-            if case .ready = newValue {
-                controlsVisibility.show()
+            .onChange(of: playbackStore.phase) { _, newValue in
+                // 読み込み完了時にコントロールを表示し、自動非表示タイマーを開始する。
+                if case .ready = newValue {
+                    controlsVisibility.show()
+                }
             }
-        }
-        .onChange(of: store.error) { _, newValue in
-            onError(newValue)
-        }
-        .errorAlert(errorAlertStore) {
-            // エラー時の閉じる導線でも再生を残さず、セッションを完全停止・破棄する。
-            playbackStore.stop()
-        }
+            .onChange(of: store.error) { _, newValue in
+                onError(newValue)
+            }
+            .errorAlert(errorAlertStore) {
+                // エラー時の閉じる導線でも再生を残さず、セッションを完全停止・破棄する。
+                playbackStore.stop()
+            }
     }
 
     /// 現在の連続再生 Store（`PlaybackStore` が保持する単一インスタンス。常に非 nil）。
@@ -105,6 +81,7 @@ struct VideoPlayerScreen: View {
             playbackRate: store.playbackRate,
             progress: store.progress,
             areControlsVisible: controlsVisibility.isVisible,
+            onClose: { playbackStore.stop() },
             onToggleControls: { controlsVisibility.toggle() },
             onTogglePlayPause: { store.togglePlayPause() },
             onPlayNext: { await store.playNext() },
@@ -155,6 +132,8 @@ struct VideoPlayerView: View {
     let progress: PlaybackProgress
     /// 再生コントロールを表示中かどうか。タップでトグルされ、一定時間後に自動で非表示になる。
     let areControlsVisible: Bool
+    /// プレイヤー画面を閉じる
+    let onClose: () -> Void
     /// 画面タップによるコントロール表示・非表示のトグル。
     let onToggleControls: () -> Void
     let onTogglePlayPause: () -> Void
@@ -210,6 +189,7 @@ struct VideoPlayerView: View {
                             isPlaying: isPlaying,
                             isMuted: isMuted,
                             playbackRate: playbackRate,
+                            onClose: onClose,
                             onSeek: onSeek,
                             onPlayPrevious: onPlayPrevious,
                             onPlayNext: onPlayNext,
@@ -263,6 +243,7 @@ private func previewVideoPlayerView(
         playbackRate: playbackRate,
         progress: progress,
         areControlsVisible: areControlsVisible,
+        onClose: {},
         onToggleControls: {},
         onTogglePlayPause: {},
         onPlayNext: {},

@@ -20,6 +20,7 @@ struct PlayerControlsContent: View {
     let isMuted: Bool
     /// 現在の再生速度（F-7）。
     let playbackRate: PlaybackRate
+    let onClose: () -> Void
     let onSeek: (TimeInterval) -> Void
     let onPlayPrevious: () async -> Void
     let onPlayNext: () async -> Void
@@ -42,14 +43,22 @@ struct PlayerControlsContent: View {
 
     private var controls: some View {
         ZStack {
-            // PIP へ遷移（F-3）。再生画面を閉じて PIP 小窓へ移行する。
-            playerControlButton {
-                Image(systemName: "pip.enter")
-            } action: {
-                onStartPictureInPicture()
+            HStack(spacing: .zero) {
+                playerControlButton {
+                    Image(systemName: "xmark")
+                } action: {
+                    onClose()
+                }
+                Spacer()
+                // PIP へ遷移（F-3）。再生画面を閉じて PIP 小窓へ移行する。
+                playerControlButton {
+                    Image(systemName: "pip.enter")
+                } action: {
+                    onStartPictureInPicture()
+                }
             }
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             HStack(spacing: .zero) {
                 playerControlButton {
                     Image(systemName: "backward.fill")
@@ -202,6 +211,7 @@ private func previewPlayerControlsContent(
         isPlaying: isPlaying,
         isMuted: isMuted,
         playbackRate: playbackRate,
+        onClose: {},
         onSeek: { _ in },
         onPlayPrevious: {},
         onPlayNext: {},
