@@ -91,6 +91,13 @@ public final class PlaybackStore {
         castProxy.observeSessionState { [weak self] state in
             self?.handleCastSessionState(state)
         }
+
+        // AVSystemRouting 経路向けに、現在再生中アセットの ID プロバイダを登録する。
+        // ルート選択（.activate）時にバックエンドがこれを引き、対象アセットを送出する。
+        // GoogleCast 経路では no-op（既定実装）。
+        castProxy.setNowPlayingAssetProvider { [weak self] in
+            self?.playlistStore.currentAsset?.id
+        }
     }
 
     /// 固定プレイリストで再生を開始し、全画面プレイヤーを提示する（全動画 / 手動選択 / 一覧セル）。

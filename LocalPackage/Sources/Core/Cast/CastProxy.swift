@@ -41,15 +41,26 @@ public struct CastProxy: Sendable {
     /// 現在 Cast 接続中かどうかを返す。
     public var isConnected: @MainActor @Sendable () -> Bool
 
+    /// 現在再生中アセットの ID を取得するプロバイダを登録する。
+    ///
+    /// `AVSystemRouting` 経路では、ユーザーがルートを選択した瞬間（`.activate`）に
+    /// 「いま再生しているアセット」を書き出して送出する必要がある。そのアセットを知っているのは
+    /// 再生セッション（`PlaybackStore`）のため、Store がここへプロバイダを登録し、バックエンドが
+    /// ルート選択時に引く。GoogleCast 経路では不要（接続後に `loadAndPlay(id)` が呼ばれる）のため
+    /// 既定は no-op。
+    public var setNowPlayingAssetProvider: @MainActor @Sendable (_ provider: @escaping @MainActor @Sendable () -> VideoAsset.ID?) -> Void
+
     public init(
         setUp: @escaping @MainActor @Sendable () -> Void = {},
         observeSessionState: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable (CastSessionState) -> Void) -> Void = { _ in },
         loadAndPlay: @escaping @Sendable (_ id: VideoAsset.ID) async -> Bool = { _ in false },
-        isConnected: @escaping @MainActor @Sendable () -> Bool = { false }
+        isConnected: @escaping @MainActor @Sendable () -> Bool = { false },
+        setNowPlayingAssetProvider: @escaping @MainActor @Sendable (_ provider: @escaping @MainActor @Sendable () -> VideoAsset.ID?) -> Void = { _ in }
     ) {
         self.setUp = setUp
         self.observeSessionState = observeSessionState
         self.loadAndPlay = loadAndPlay
         self.isConnected = isConnected
+        self.setNowPlayingAssetProvider = setNowPlayingAssetProvider
     }
 }

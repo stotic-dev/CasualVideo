@@ -1,8 +1,8 @@
 //
-//  File.swift
-//  LocalPackage
+//  CastComponentResolver+live.swift
+//  App
 //
-//  Created by Taichi Sato on 2026/06/13.
+//  Cast ボタン UI の本番解決。選択された Cast バックエンドに応じてボタンを差し替える。
 //
 
 import Core
@@ -10,13 +10,29 @@ import Infra
 import SwiftUI
 
 extension CastComponentResolver {
-    static let live = CastComponentResolver {
-        // GoogleCast（iOS スライスのみ）が使える環境では実ボタン、それ以外（macOS のホスト
-        // ビルド等）ではプレースホルダにフォールバックし、App をクロスプラットフォームで成立させる。
-        #if canImport(GoogleCast)
-        GoogleCastIconButton()
-        #else
-        Image(systemName: "shareplay")
-        #endif
+
+    /// 選択された Cast バックエンドに対応する Cast ボタンを解決する。
+    ///
+    /// - `.systemRouting`: システム標準のルートピッカー（`AVRoutePickerView`）。
+    /// - それ以外（`.googleCast` / `.auto`）: GoogleCast の Cast ボタン。
+    ///
+    /// GoogleCast / AVKit が使えない環境（macOS のホストビルド等）ではプレースホルダにフォールバックし、
+    /// App をクロスプラットフォームで成立させる。
+    static func live(backend: CastBackend) -> CastComponentResolver {
+        CastComponentResolver {
+            if backend == .systemRouting {
+                #if canImport(UIKit) && canImport(AVKit)
+                SystemRoutePickerView()
+                #else
+                Image(systemName: "shareplay")
+                #endif
+            } else {
+                #if canImport(GoogleCast)
+                GoogleCastIconButton()
+                #else
+                Image(systemName: "shareplay")
+                #endif
+            }
+        }
     }
 }
