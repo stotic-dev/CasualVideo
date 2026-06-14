@@ -64,6 +64,19 @@ struct VideoPlayerScreen: View {
         VideoPlayerViewState(phase: playbackStore.phase, isCasting: playbackStore.isCasting)
     }
 
+    /// Cast 中かどうか。再生位置・再生状態・コントロール操作の同期先を切り替える。
+    private var isCasting: Bool { playbackStore.isCasting }
+
+    /// シークバーに表示する再生進捗。Cast 中は Cast デバイス側の進捗を用いる。
+    private var progress: PlaybackProgress {
+        isCasting ? playbackStore.castState.progress : store.progress
+    }
+
+    /// 再生中かどうか。Cast 中は Cast デバイス側の状態を用いる。
+    private var isPlaying: Bool {
+        isCasting ? playbackStore.castState.isPlaying : store.isPlaying
+    }
+
     private var playerView: some View {
         VideoPlayerView(
             state: state,
@@ -71,22 +84,28 @@ struct VideoPlayerScreen: View {
             totalCount: store.totalCount,
             canPlayNext: store.canPlayNext,
             canPlayPrevious: store.canPlayPrevious,
-            isPlaying: store.isPlaying,
-            isPreparingItem: store.isPreparingItem,
+            isPlaying: isPlaying,
+            // Cast 中はローカルのアイテム準備状態に依らずコントロールを活性のままにする。
+            isPreparingItem: isCasting ? false : store.isPreparingItem,
             playbackOrder: store.playbackOrder,
             repeatMode: store.repeatMode,
             isMuted: store.isMuted,
             playbackRate: store.playbackRate,
-            progress: store.progress,
+            progress: progress,
             areControlsVisible: controlsVisibility.isVisible,
             onClose: { playbackStore.stop() },
             onToggleControls: { controlsVisibility.toggle() },
-            onTogglePlayPause: { store.togglePlayPause() },
+            // Cast 中は再生/一時停止・シークを Cast デバイスへ送る。
+            onTogglePlayPause: {
+                if isCasting { playbackStore.castTogglePlayPause() } else { store.togglePlayPause() }
+            },
             onPlayNext: { await store.playNext() },
             onPlayPrevious: { await store.playPrevious() },
             onToggleShuffle: { store.toggleShuffle() },
             onCycleRepeat: { store.cycleRepeatMode() },
-            onSeek: { store.seek(to: $0) },
+            onSeek: { seconds in
+                if isCasting { playbackStore.castSeek(to: seconds) } else { store.seek(to: seconds) }
+            },
             onToggleMute: { store.toggleMute() },
             onSelectRate: { store.setPlaybackRate($0) },
             // PIP（F-3）へ移行する。Store が開始完了を待って全画面プレイヤーを閉じる。

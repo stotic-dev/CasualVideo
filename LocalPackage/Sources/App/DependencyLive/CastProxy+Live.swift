@@ -59,7 +59,21 @@ extension CastProxy {
             },
             isConnected: {
                 castClient.isConnected()
-            }
+            },
+            // Cast デバイス側の再生状態（Infra のスナップショット）を Core の状態へマッピングして橋渡しする。
+            observeRemoteState: { handler in
+                castClient.observeRemoteState { snapshot in
+                    handler(
+                        CastPlaybackState(
+                            progress: PlaybackProgress(currentTime: snapshot.position, duration: snapshot.duration),
+                            isPlaying: snapshot.isPlaying
+                        )
+                    )
+                }
+            },
+            play: { castClient.playRemote() },
+            pause: { castClient.pauseRemote() },
+            seek: { castClient.seekRemote(to: $0) }
         )
     }
 }

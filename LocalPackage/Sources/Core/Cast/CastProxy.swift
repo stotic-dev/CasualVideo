@@ -50,17 +50,39 @@ public struct CastProxy: Sendable {
     /// 既定は no-op。
     public var setNowPlayingAssetProvider: @MainActor @Sendable (_ provider: @escaping @MainActor @Sendable () -> VideoAsset.ID?) -> Void
 
+    /// Cast デバイス側の再生状態（位置・長さ・再生中か）を購読する。
+    ///
+    /// 接続中は周期的に最新状態が通知され、再生画面のシークバー・再生/一時停止ボタンの同期に用いる。
+    public var observeRemoteState: @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable (CastPlaybackState) -> Void) -> Void
+
+    /// Cast デバイスの再生を再開する。
+    public var play: @MainActor @Sendable () -> Void
+
+    /// Cast デバイスの再生を一時停止する。
+    public var pause: @MainActor @Sendable () -> Void
+
+    /// Cast デバイスを指定秒（絶対位置）へシークする。
+    public var seek: @MainActor @Sendable (_ seconds: TimeInterval) -> Void
+
     public init(
         setUp: @escaping @MainActor @Sendable () -> Void = {},
         observeSessionState: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable (CastSessionState) -> Void) -> Void = { _ in },
         loadAndPlay: @escaping @Sendable (_ id: VideoAsset.ID) async -> Bool = { _ in false },
         isConnected: @escaping @MainActor @Sendable () -> Bool = { false },
-        setNowPlayingAssetProvider: @escaping @MainActor @Sendable (_ provider: @escaping @MainActor @Sendable () -> VideoAsset.ID?) -> Void = { _ in }
+        setNowPlayingAssetProvider: @escaping @MainActor @Sendable (_ provider: @escaping @MainActor @Sendable () -> VideoAsset.ID?) -> Void = { _ in },
+        observeRemoteState: @escaping @MainActor @Sendable (_ handler: @escaping @MainActor @Sendable (CastPlaybackState) -> Void) -> Void = { _ in },
+        play: @escaping @MainActor @Sendable () -> Void = {},
+        pause: @escaping @MainActor @Sendable () -> Void = {},
+        seek: @escaping @MainActor @Sendable (_ seconds: TimeInterval) -> Void = { _ in }
     ) {
         self.setUp = setUp
         self.observeSessionState = observeSessionState
         self.loadAndPlay = loadAndPlay
         self.isConnected = isConnected
         self.setNowPlayingAssetProvider = setNowPlayingAssetProvider
+        self.observeRemoteState = observeRemoteState
+        self.play = play
+        self.pause = pause
+        self.seek = seek
     }
 }

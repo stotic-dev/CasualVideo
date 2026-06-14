@@ -19,6 +19,7 @@ import Foundation
 
 #if canImport(AVSystemRouting)
 import AVSystemRouting
+import CoreMedia
 #endif
 
 /// 送出するメディアの配信情報。`App` の assemble 層が PhotoKit 書き出し + ローカル HTTP 配信から組み立てる。
@@ -50,6 +51,12 @@ public final class SystemRouteCastClient: NSObject {
 
     /// アセット ID から配信メディアを解決するクロージャ（`App` が PhotoKit + HTTP サーバで組み立てる）。
     private var mediaResolver: ((String) async -> ResolvedCastMedia?)?
+
+    /// Cast デバイス側の再生状態を上位へ通知するハンドラ。
+    private var remoteStateHandler: ((RemotePlaybackSnapshot) -> Void)?
+
+    /// 再生状態を周期的にポーリングするタスク（接続中のみ稼働）。
+    private var pollingTask: Task<Void, Never>?
 
     /// 多重初期化（observer 二重登録）を避けるためのフラグ。
     private var didSetUp = false
@@ -93,9 +100,14 @@ public final class SystemRouteCastClient: NSObject {
     }
 
     /// ルート監視を開始する（observer を登録）。初回のみ実行する。
+    ///
+    /// 対応するメディアデバイス拡張が導入されていない（`MDESupportedProtocols` 未設定を含む）環境では
+    /// AVSystemRouting の初期化が成立しないため、observer 登録を行わず no-op とする。
+    /// 実 MDE プロトコル + 拡張ターゲットが揃うまでは常にこのガードで早期 return する。
     public func setUp() {
         #if canImport(AVSystemRouting)
         if #available(iOS 27.0, *) {
+            guard Self.supportedExtensionAvailable else { return }
             guard !didSetUp else { return }
             didSetUp = true
             _ = AVSystemRouteController.shared.addObserver(self)
@@ -122,6 +134,80 @@ public final class SystemRouteCastClient: NSObject {
     public func isConnected() -> Bool {
         connected
     }
+
+    /// Cast デバイス側の再生状態を購読する。接続中は周期的に最新状態が通知される。
+    public func observeRemoteState(_ handler: @escaping (RemotePlaybackSnapshot) -> Void) {
+        remoteStateHandler = handler
+    }
+
+    /// Cast デバイスの再生を再開する。
+    public func playRemote() {
+        #if canImport(AVSystemRouting)
+        if #available(iOS 27.0, *), var control = playbackControl {
+            // 存在型は値型扱いのため一度 var に束ねてから設定する（内部実装はクラス参照のためデバイスへ反映される）。
+            control.isPlaying = true
+        }
+        #endif
+    }
+
+    /// Cast デバイスの再生を一時停止する。
+    public func pauseRemote() {
+        #if canImport(AVSystemRouting)
+        if #available(iOS 27.0, *), var control = playbackControl {
+            control.isPlaying = false
+        }
+        #endif
+    }
+
+    /// Cast デバイスを指定秒（絶対位置）へシークする。
+    public func seekRemote(to seconds: TimeInterval) {
+        #if canImport(AVSystemRouting)
+        if #available(iOS 27.0, *), var control = playbackControl {
+            control.currentPlaybackPosition = CMTime(seconds: seconds, preferredTimescale: 600)
+        }
+        #endif
+    }
+
+    #if canImport(AVSystemRouting)
+    /// 現在のメディアセッションの再生コントロール。
+    @available(iOS 27.0, *)
+    private var playbackControl: (any AVInterfaceControllable)? {
+        (_currentMediaSession as? AVSystemRouteMediaSession)?.playbackControl
+    }
+
+    /// 接続時: 再生状態の周期ポーリングを開始する。
+    @available(iOS 27.0, *)
+    private func startRemoteStateTracking() {
+        pollingTask?.cancel()
+        pollingTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                self?.emitCurrentState()
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
+    }
+
+    /// 切断時: ポーリングを停止する。
+    private func stopRemoteStateTracking() {
+        pollingTask?.cancel()
+        pollingTask = nil
+    }
+
+    /// 現在の Cast デバイス状態を組み立てて上位へ通知する。
+    @available(iOS 27.0, *)
+    private func emitCurrentState() {
+        guard let control = playbackControl else { return }
+        let position = control.currentPlaybackPosition.seconds
+        let duration = control.timeRange.duration.seconds
+        remoteStateHandler?(
+            RemotePlaybackSnapshot(
+                position: position.isFinite ? position : 0,
+                duration: duration.isFinite ? duration : 0,
+                isPlaying: control.isPlaying
+            )
+        )
+    }
+    #endif
 }
 
 // MARK: - AVSystemRouteControllerObserver
@@ -165,6 +251,7 @@ extension SystemRouteCastClient: AVSystemRouteControllerObserver {
             currentSession = session
             _currentMediaSession = mediaSession
             connected = true
+            startRemoteStateTracking()
             sessionStateHandler?(true)
             return true
         } catch {
@@ -176,6 +263,7 @@ extension SystemRouteCastClient: AVSystemRouteControllerObserver {
     /// ルート解除時: セッションを停止して接続状態をクリアする。
     @MainActor
     private func deactivate() {
+        stopRemoteStateTracking()
         if let route = currentRoute, let session = currentSession {
             session.stop()
             route.removeSession(session)

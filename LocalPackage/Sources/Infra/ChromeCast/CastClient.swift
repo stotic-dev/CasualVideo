@@ -30,6 +30,12 @@ public final class CastClient: NSObject {
     /// セッション接続状態の変化を上位へ通知するハンドラ。接続=true / 切断=false。
     private var sessionStateHandler: ((Bool) -> Void)?
 
+    /// Cast デバイス側の再生状態を上位へ通知するハンドラ。
+    private var remoteStateHandler: ((RemotePlaybackSnapshot) -> Void)?
+
+    /// 再生位置を周期的にポーリングするタスク（接続中のみ稼働）。
+    private var pollingTask: Task<Void, Never>?
+
     /// 多重初期化を避けるためのフラグ。
     private var didSetUp = false
 
@@ -56,6 +62,36 @@ public final class CastClient: NSObject {
     /// セッション接続状態を購読する。接続・切断のたびにハンドラが呼ばれる。
     public func observeSessionState(_ handler: @escaping (Bool) -> Void) {
         sessionStateHandler = handler
+    }
+
+    /// Cast デバイス側の再生状態を購読する。接続中は周期的に最新状態が通知される。
+    public func observeRemoteState(_ handler: @escaping (RemotePlaybackSnapshot) -> Void) {
+        remoteStateHandler = handler
+    }
+
+    /// Cast デバイスの再生を再開する。
+    public func playRemote() {
+        #if canImport(GoogleCast)
+        currentRemoteMediaClient()?.play()
+        #endif
+    }
+
+    /// Cast デバイスの再生を一時停止する。
+    public func pauseRemote() {
+        #if canImport(GoogleCast)
+        currentRemoteMediaClient()?.pause()
+        #endif
+    }
+
+    /// Cast デバイスを指定秒（絶対位置）へシークする。
+    public func seekRemote(to seconds: TimeInterval) {
+        #if canImport(GoogleCast)
+        let options = GCKMediaSeekOptions()
+        options.interval = seconds
+        // interval を現在位置からの相対ではなく絶対位置として扱う。
+        options.relative = false
+        currentRemoteMediaClient()?.seek(with: options)
+        #endif
     }
 
     /// 現在 Cast セッションが接続済みかどうかを返す。
@@ -101,6 +137,50 @@ public final class CastClient: NSObject {
         return false
         #endif
     }
+
+    // MARK: - Private（再生状態の同期）
+
+    #if canImport(GoogleCast)
+    /// 現在のセッションの `GCKRemoteMediaClient` を返す。
+    private func currentRemoteMediaClient() -> GCKRemoteMediaClient? {
+        guard didSetUp else { return nil }
+        return GCKCastContext.sharedInstance().sessionManager.currentCastSession?.remoteMediaClient
+    }
+
+    /// 接続時: リモートメディアクライアントのリスナー登録と位置ポーリングを開始する。
+    private func startRemoteStateTracking() {
+        currentRemoteMediaClient()?.add(self)
+        pollingTask?.cancel()
+        pollingTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                self?.emitCurrentState()
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
+    }
+
+    /// 切断時: リスナー解除とポーリング停止を行う。
+    private func stopRemoteStateTracking() {
+        currentRemoteMediaClient()?.remove(self)
+        pollingTask?.cancel()
+        pollingTask = nil
+    }
+
+    /// 現在の Cast デバイス状態を組み立てて上位へ通知する。
+    private func emitCurrentState() {
+        guard let client = currentRemoteMediaClient() else { return }
+        let position = client.approximateStreamPosition()
+        let duration = client.mediaStatus?.mediaInformation?.streamDuration ?? 0
+        let isPlaying = client.mediaStatus?.playerState == .playing
+        remoteStateHandler?(
+            RemotePlaybackSnapshot(
+                position: position.isFinite ? position : 0,
+                duration: duration.isFinite ? duration : 0,
+                isPlaying: isPlaying
+            )
+        )
+    }
+    #endif
 }
 
 // MARK: - GCKSessionManagerListener
@@ -109,19 +189,41 @@ public final class CastClient: NSObject {
 extension CastClient: GCKSessionManagerListener {
 
     public nonisolated func sessionManager(_ sessionManager: GCKSessionManager, didStart session: GCKSession) {
-        Task { @MainActor in self.sessionStateHandler?(true) }
+        Task { @MainActor in
+            self.sessionStateHandler?(true)
+            self.startRemoteStateTracking()
+        }
     }
 
     public nonisolated func sessionManager(_ sessionManager: GCKSessionManager, didResumeSession session: GCKSession) {
-        Task { @MainActor in self.sessionStateHandler?(true) }
+        Task { @MainActor in
+            self.sessionStateHandler?(true)
+            self.startRemoteStateTracking()
+        }
     }
 
     public nonisolated func sessionManager(_ sessionManager: GCKSessionManager, didEnd session: GCKSession, withError error: Error?) {
-        Task { @MainActor in self.sessionStateHandler?(false) }
+        Task { @MainActor in
+            self.stopRemoteStateTracking()
+            self.sessionStateHandler?(false)
+        }
     }
 
     public nonisolated func sessionManager(_ sessionManager: GCKSessionManager, didFailToStart session: GCKSession, withError error: Error) {
-        Task { @MainActor in self.sessionStateHandler?(false) }
+        Task { @MainActor in
+            self.stopRemoteStateTracking()
+            self.sessionStateHandler?(false)
+        }
+    }
+}
+
+// MARK: - GCKRemoteMediaClientListener
+
+extension CastClient: GCKRemoteMediaClientListener {
+
+    public nonisolated func remoteMediaClient(_ client: GCKRemoteMediaClient, didUpdate mediaStatus: GCKMediaStatus?) {
+        // 再生/一時停止など状態変化をポーリングを待たず即時反映する。
+        Task { @MainActor in self.emitCurrentState() }
     }
 }
 #endif

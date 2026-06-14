@@ -19,6 +19,7 @@
 //
 
 import Core
+import Foundation
 import Observation
 
 /// 再生中のセッション状態を管理する Store。連続再生 Store の生成・保持と全画面プレイヤーの提示状態を持つ。
@@ -60,6 +61,11 @@ public final class PlaybackStore {
     /// Chromecast 接続中かどうか。接続時は再生中アセットを Cast デバイスへ引き継ぐ。
     public private(set) var isCasting = false
 
+    /// Cast デバイス側の再生状態（位置・長さ・再生中か）。
+    ///
+    /// Cast 接続中は周期的に更新され、再生画面のシークバー・再生/一時停止ボタンの同期に用いる。
+    public private(set) var castState = CastPlaybackState()
+
     private let playerProxy: VideoPlayerProxy
     private let nowPlayingInfoProxy: NowPlayingInfoProxy
     /// 再生開始時の初期値（ミュート・速度 / F-7）を供給する設定 Store。
@@ -97,6 +103,11 @@ public final class PlaybackStore {
         // GoogleCast 経路では no-op（既定実装）。
         castProxy.setNowPlayingAssetProvider { [weak self] in
             self?.playlistStore.currentAsset?.id
+        }
+
+        // Cast デバイス側の再生状態を購読し、再生画面の同期に用いる。
+        castProxy.observeRemoteState { [weak self] state in
+            self?.castState = state
         }
     }
 
@@ -156,7 +167,32 @@ public final class PlaybackStore {
             Task { _ = await castProxy.loadAndPlay(asset.id) }
         case .disconnected:
             isCasting = false
+            castState = CastPlaybackState()
         }
+    }
+
+    // MARK: - Cast デバイスの再生操作
+
+    /// Cast デバイスの再生 / 一時停止をトグルする。
+    ///
+    /// Cast 中の再生画面コントロールから呼ぶ。現在の Cast 状態に応じて操作を送り、
+    /// 表示の追従性のため `castState.isPlaying` を楽観的に即時反映する（次のポーリングで実値に収束）。
+    public func castTogglePlayPause() {
+        if castState.isPlaying {
+            castProxy.pause()
+            castState.isPlaying = false
+        } else {
+            castProxy.play()
+            castState.isPlaying = true
+        }
+    }
+
+    /// Cast デバイスを指定秒へシークする。
+    ///
+    /// 表示の追従性のため `castState.progress.currentTime` を即時反映する（次のポーリングで実値に収束）。
+    public func castSeek(to seconds: TimeInterval) {
+        castProxy.seek(seconds)
+        castState.progress.currentTime = seconds
     }
 
     private func presentAndLoad(startIndex: Int, provider: @escaping () async -> [VideoAsset]) {

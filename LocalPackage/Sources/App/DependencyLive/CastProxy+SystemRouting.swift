@@ -65,7 +65,21 @@ extension CastProxy {
             // 再生セッションのアセット ID プロバイダを Client へ橋渡しする。
             setNowPlayingAssetProvider: { provider in
                 client.setAssetIDProvider { provider() }
-            }
+            },
+            // Cast デバイス側の再生状態（Infra のスナップショット）を Core の状態へマッピングして橋渡しする。
+            observeRemoteState: { handler in
+                client.observeRemoteState { snapshot in
+                    handler(
+                        CastPlaybackState(
+                            progress: PlaybackProgress(currentTime: snapshot.position, duration: snapshot.duration),
+                            isPlaying: snapshot.isPlaying
+                        )
+                    )
+                }
+            },
+            play: { client.playRemote() },
+            pause: { client.pauseRemote() },
+            seek: { client.seekRemote(to: $0) }
         )
     }
 }
