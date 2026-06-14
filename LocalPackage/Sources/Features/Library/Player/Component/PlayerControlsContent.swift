@@ -22,6 +22,9 @@ struct PlayerControlsContent: View {
     let isMuted: Bool
     /// 現在の再生速度（F-7）。
     let playbackRate: PlaybackRate
+    /// PIP 遷移ボタンを活性にするか。false の間は PIP ボタンのみ非活性にする
+    /// （他のコントロールは活性のまま操作できる）。キャスト中などに false になる。
+    let isPictureInPictureEnabled: Bool
     let onClose: () -> Void
     let onSeek: (TimeInterval) -> Void
     let onPlayPrevious: () async -> Void
@@ -76,11 +79,13 @@ private extension PlayerControlsContent {
                     .padding(8)
                     .glassEffectStyle()
                 // PIP へ遷移（F-3）。再生画面を閉じて PIP 小窓へ移行する。
+                // Cast 中など PIP 不可の状態では非活性にする。
                 playerControlButton {
                     Image(systemName: "pip.enter")
                 } action: {
                     onStartPictureInPicture()
                 }
+                .disabled(!isPictureInPictureEnabled)
             }
         }
         .foregroundStyle(.white)
@@ -222,7 +227,8 @@ private func previewPlayerControlsContent(
     repeatMode: RepeatMode = .off,
     isMuted: Bool = false,
     playbackRate: PlaybackRate = .normal,
-    progress: PlaybackProgress = PlaybackProgress(currentTime: 42, duration: 215)
+    progress: PlaybackProgress = PlaybackProgress(currentTime: 42, duration: 215),
+    isPictureInPictureEnabled: Bool = true
 ) -> some View {
     PlayerControlsContent(
         progress: progress,
@@ -234,6 +240,7 @@ private func previewPlayerControlsContent(
         isPlaying: isPlaying,
         isMuted: isMuted,
         playbackRate: playbackRate,
+        isPictureInPictureEnabled: isPictureInPictureEnabled,
         onClose: {},
         onSeek: { _ in },
         onPlayPrevious: {},
@@ -271,6 +278,10 @@ private func previewPlayerControlsContent(
 
 #Preview("ミュート + 2.0x") {
     previewPlayerControlsContent(isMuted: true, playbackRate: .double)
+}
+
+#Preview("Cast 中（PIP 非活性）") {
+    previewPlayerControlsContent(isPictureInPictureEnabled: false)
 }
 
 #endif

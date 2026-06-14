@@ -35,13 +35,14 @@ struct VideoPlayerScreen: View {
         playerView
             .task {
                 // 提示のたび（PIP からの復帰を含む）に、再生可能ならコントロールを表示する。
-                if case .ready = state {
+                if state.isReady {
                     controlsVisibility.show()
                 }
             }
-            .onChange(of: playbackStore.phase) { _, newValue in
-                // 読み込み完了時にコントロールを表示し、自動非表示タイマーを開始する。
-                if case .ready = newValue {
+            .onChange(of: state) { _, newValue in
+                // 再生可能になった時（読み込み完了・キャスト切替）にコントロールを表示し、
+                // 自動非表示タイマーを開始する。
+                if newValue.isReady {
                     controlsVisibility.show()
                 }
             }
@@ -57,13 +58,10 @@ struct VideoPlayerScreen: View {
     /// 現在の連続再生 Store（`PlaybackStore` が保持する単一インスタンス。常に非 nil）。
     private var store: PlaylistStore { playbackStore.playlistStore }
 
-    /// Store の進行状態を表示用の状態へ写像する。
+    /// 進行状態とキャスト有無から導出した、画面が分岐すべき表示状態。
+    /// 写像ロジックは `VideoPlayerViewState` 側に閉じる。
     private var state: VideoPlayerViewState {
-        switch playbackStore.phase {
-        case .idle, .loading: return .loading
-        case .ready: return .ready
-        case .failed: return .failed
-        }
+        VideoPlayerViewState(phase: playbackStore.phase, isCasting: playbackStore.isCasting)
     }
 
     private var playerView: some View {
@@ -163,47 +161,10 @@ struct VideoPlayerView: View {
         case .loading:
             ProgressView()
                 .tint(.white)
-            
-        case .ready:
-            CustomVideoPlayer()
-            // 画面タップでコントロールの表示・非表示をトグルする。
-                .contentShape(.rect)
-                .onTapGesture { onToggleControls() }
-                .overlay(alignment: .top) {
-                    if totalCount > 1, let position, areControlsVisible {
-                        Text("\(position) / \(totalCount)")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(8)
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    if totalCount >= 1, areControlsVisible {
-                        PlayerControlsContent(
-                            progress: progress,
-                            playbackOrder: playbackOrder,
-                            repeatMode: repeatMode,
-                            canPlayPrevious: canPlayPrevious,
-                            canPlayNext: canPlayNext,
-                            isPreparingItem: isPreparingItem,
-                            isPlaying: isPlaying,
-                            isMuted: isMuted,
-                            playbackRate: playbackRate,
-                            onClose: onClose,
-                            onSeek: onSeek,
-                            onPlayPrevious: onPlayPrevious,
-                            onPlayNext: onPlayNext,
-                            onToggleShuffle: onToggleShuffle,
-                            onCycleRepeat: onCycleRepeat,
-                            onTogglePlayPause: onTogglePlayPause,
-                            onToggleMute: onToggleMute,
-                            onSelectRate: onSelectRate,
-                            onStartPictureInPicture: onStartPictureInPicture
-                        )
-                    }
-                }
-                .animation(.easeInOut(duration: 0.2), value: areControlsVisible)
-            
+
+        case .playing, .casting:
+            playerSurface
+
         case .failed:
             ContentUnavailableView(
                 "再生できません",
@@ -212,12 +173,78 @@ struct VideoPlayerView: View {
             )
         }
     }
+
+    /// 再生中（ローカル / キャスト）の映像面とコントロール群。
+    private var playerSurface: some View {
+        videoLayer
+        // 画面タップでコントロールの表示・非表示をトグルする。
+            .contentShape(.rect)
+            .onTapGesture { onToggleControls() }
+            .overlay(alignment: .top) {
+                if totalCount > 1, let position, areControlsVisible {
+                    Text("\(position) / \(totalCount)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(8)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if totalCount >= 1, areControlsVisible {
+                    PlayerControlsContent(
+                        progress: progress,
+                        playbackOrder: playbackOrder,
+                        repeatMode: repeatMode,
+                        canPlayPrevious: canPlayPrevious,
+                        canPlayNext: canPlayNext,
+                        isPreparingItem: isPreparingItem,
+                        isPlaying: isPlaying,
+                        isMuted: isMuted,
+                        playbackRate: playbackRate,
+                        isPictureInPictureEnabled: state.allowsPictureInPicture,
+                        onClose: onClose,
+                        onSeek: onSeek,
+                        onPlayPrevious: onPlayPrevious,
+                        onPlayNext: onPlayNext,
+                        onToggleShuffle: onToggleShuffle,
+                        onCycleRepeat: onCycleRepeat,
+                        onTogglePlayPause: onTogglePlayPause,
+                        onToggleMute: onToggleMute,
+                        onSelectRate: onSelectRate,
+                        onStartPictureInPicture: onStartPictureInPicture
+                    )
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: areControlsVisible)
+    }
+
+    /// 映像面。キャスト中は端末での再生を止め「Cast 再生中」表示へ差し替える。
+    @ViewBuilder
+    private var videoLayer: some View {
+        switch state {
+        case .casting:
+            castingIndicator
+        default:
+            CustomVideoPlayer()
+        }
+    }
+
+    /// キャスト中に映像面へ表示する「Chromecast で再生中」インジケーター。
+    private var castingIndicator: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "tv.and.hifispeaker.fill")
+                .font(.system(size: 56))
+            Text("Chromecast で再生中")
+                .font(.headline)
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 }
 
 #if DEBUG
 @MainActor
 private func previewVideoPlayerView(
-    state: VideoPlayerViewState = .ready,
+    state: VideoPlayerViewState = .playing,
     position: Int? = 2,
     totalCount: Int = 5,
     isPlaying: Bool = true,
@@ -260,6 +287,10 @@ private func previewVideoPlayerView(
 
 #Preview {
     previewVideoPlayerView()
+}
+
+#Preview("Cast 再生中") {
+    previewVideoPlayerView(state: .casting)
 }
 
 #endif
