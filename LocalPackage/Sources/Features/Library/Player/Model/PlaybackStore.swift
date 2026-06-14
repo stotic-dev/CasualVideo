@@ -136,12 +136,15 @@ public final class PlaybackStore {
 
     /// Cast セッションの接続状態変化に応じて、再生中アセットの引き継ぎを行う。
     ///
-    /// 接続時は現在再生中のアセットを Chromecast へロードして再生する（ローカル再生は継続させ、
-    /// 端末側はミュート等の制御を別途必要に応じて行う想定だが、本実装ではロードまでを担う）。
+    /// 接続時は端末側のローカル再生を止めたうえで、現在再生中のアセットを Chromecast へ
+    /// ロードして再生する（再生面は Chromecast に一本化し、二重再生を避ける）。
+    /// セッション（プレイリスト・再生位置）は保持するため、切断後はその位置から再開できる。
     private func handleCastSessionState(_ state: CastSessionState) {
         switch state {
         case .connected:
             isCasting = true
+            // 端末側の再生は止める（Cast 中はローカルプレイヤーを再生させない）。
+            playlistStore.pause()
             guard let asset = playlistStore.currentAsset else { return }
             Task { _ = await castProxy.loadAndPlay(asset.id) }
         case .disconnected:
