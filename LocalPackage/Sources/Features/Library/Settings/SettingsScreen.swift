@@ -20,11 +20,16 @@ struct SettingsScreen: View {
     /// 再生デフォルト設定の共有 Store（App で assemble・注入）。再生画面とも共有する。
     @Environment(SettingsStore.self) private var store
 
+    /// 開発者向け設定の共有 Store（App で assemble・注入）。開発者セクションの編集に用いる。
+    @Environment(DeveloperSettingsStore.self) private var developerStore
+
     var body: some View {
         SettingsView(
             settings: store.settings,
             onSetMuted: { store.setMuted($0) },
-            onSetPlaybackRate: { store.setPlaybackRate($0) }
+            onSetPlaybackRate: { store.setPlaybackRate($0) },
+            castBackendOverride: developerStore.settings.castBackendOverride,
+            onSetCastBackendOverride: { developerStore.setCastBackendOverride($0) }
         )
         .navigationTitle("設定")
     }
@@ -36,6 +41,10 @@ struct SettingsView: View {
     let settings: PlaybackSettings
     let onSetMuted: (Bool) -> Void
     let onSetPlaybackRate: (PlaybackRate) -> Void
+    /// 開発者モードで選択中の Cast バックエンド override。
+    let castBackendOverride: CastBackend
+    /// Cast バックエンド override の変更（開発者モード）。
+    let onSetCastBackendOverride: (CastBackend) -> Void
 
     var body: some View {
         Form {
@@ -60,8 +69,35 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            #if DEBUG
+            developerSection
+            #endif
         }
     }
+
+    #if DEBUG
+    /// 開発者向けセクション。Cast の送出バックエンドを手動で切り替える（DEBUG ビルドのみ）。
+    private var developerSection: some View {
+        Section {
+            Picker(
+                "Cast バックエンド",
+                selection: Binding(
+                    get: { castBackendOverride },
+                    set: { onSetCastBackendOverride($0) }
+                )
+            ) {
+                ForEach(CastBackend.allCases, id: \.self) { backend in
+                    Text(backend.displayName).tag(backend)
+                }
+            }
+        } header: {
+            Text("開発者")
+        } footer: {
+            Text("変更はアプリ再起動後に反映されます。")
+        }
+    }
+    #endif
 }
 
 #if DEBUG
@@ -71,7 +107,9 @@ struct SettingsView: View {
         SettingsView(
             settings: PlaybackSettings(),
             onSetMuted: { _ in },
-            onSetPlaybackRate: { _ in }
+            onSetPlaybackRate: { _ in },
+            castBackendOverride: .auto,
+            onSetCastBackendOverride: { _ in }
         )
         .navigationTitle("設定")
     }
@@ -82,7 +120,9 @@ struct SettingsView: View {
         SettingsView(
             settings: PlaybackSettings(isMuted: false, playbackRate: .fast15),
             onSetMuted: { _ in },
-            onSetPlaybackRate: { _ in }
+            onSetPlaybackRate: { _ in },
+            castBackendOverride: .systemRouting,
+            onSetCastBackendOverride: { _ in }
         )
         .navigationTitle("設定")
     }

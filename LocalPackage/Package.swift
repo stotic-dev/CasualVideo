@@ -40,6 +40,9 @@ let package = Package(
             targets: [libraryFeature.name]
         )
     ],
+    dependencies: [
+        .package(url: "https://github.com/SRGSSR/google-cast-sdk.git", exact: "4.8.4")
+    ],
     targets: [
         .target(
             name: app.name,
@@ -54,7 +57,12 @@ let package = Package(
             name: core.name
         ),
         .target(
-            name: infra.name
+            name: infra.name,
+            dependencies: [
+                // GoogleCast SDK は iOS スライスのみ（xcframework に macOS なし）。
+                // `swift test` 等のホスト（macOS）ビルドで解決失敗しないよう iOS 限定の依存にする。
+                .product(name: "GoogleCast", package: "google-cast-sdk", condition: .when(platforms: [.iOS]))
+            ]
         ),
         .testTarget(
             name: libraryFeature.testTargetName!,

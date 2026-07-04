@@ -931,43 +931,28 @@ struct PlaylistStoreTests {
     }
 
     // MARK: - RemoteCommand のディスパッチ（F-5）
-
-    @Test("start 時に observeRemoteCommand は一度だけ登録される")
-    func start_registersRemoteCommandObserverOnce() async {
-        // Arrange
-        let played = Box<[String]>([])
-        let observeCount = Box(0)
-        let store = PlaylistStore(
-            playerProxy: recordingProxy(played: played),
-            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]), observeCount: observeCount)
-        )
-
-        // Act: 複数回 start しても登録は一度きり
-        await store.start(playlist: assets, from: 0)
-        await store.start(playlist: assets, from: 1)
-
-        // Assert
-        #expect(observeCount.value == 1)
-    }
+    //
+    // リモートコマンドの購読は `PlaybackStore` で一元管理し、ローカル再生中は
+    // `PlaylistStore.dispatchRemoteCommand(_:)` へ転送される。ここではその転送先
+    // （コマンド → 再生操作のマッピング）を直接呼んで検証する。
 
     @Test("RemoteCommand .toggle で再生状態がトグルされる")
     func remoteCommand_toggle_togglesPlayback() async {
         // Arrange
         let played = Box<[String]>([])
-        let remoteHandler = Box<(@MainActor @Sendable (RemoteCommand) -> Void)?>(nil)
         let store = PlaylistStore(
             playerProxy: recordingProxy(played: played),
-            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]), remoteHandler: remoteHandler)
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]))
         )
         await store.start(playlist: assets, from: 0)
         #expect(store.isPlaying == true)
 
         // Act & Assert: toggle で一時停止
-        remoteHandler.value?(.toggle)
+        store.dispatchRemoteCommand(.toggle)
         #expect(store.isPlaying == false)
 
         // Act & Assert: 再度 toggle で再開
-        remoteHandler.value?(.toggle)
+        store.dispatchRemoteCommand(.toggle)
         #expect(store.isPlaying == true)
     }
 
@@ -975,27 +960,26 @@ struct PlaylistStoreTests {
     func remoteCommand_playPause_dispatch() async {
         // Arrange
         let played = Box<[String]>([])
-        let remoteHandler = Box<(@MainActor @Sendable (RemoteCommand) -> Void)?>(nil)
         let store = PlaylistStore(
             playerProxy: recordingProxy(played: played),
-            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]), remoteHandler: remoteHandler)
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]))
         )
         await store.start(playlist: assets, from: 0)
 
         // Act & Assert: .pause で一時停止
-        remoteHandler.value?(.pause)
+        store.dispatchRemoteCommand(.pause)
         #expect(store.isPlaying == false)
 
         // Act & Assert: すでに停止中の .pause は無視される
-        remoteHandler.value?(.pause)
+        store.dispatchRemoteCommand(.pause)
         #expect(store.isPlaying == false)
 
         // Act & Assert: .play で再開
-        remoteHandler.value?(.play)
+        store.dispatchRemoteCommand(.play)
         #expect(store.isPlaying == true)
 
         // Act & Assert: すでに再生中の .play は無視される
-        remoteHandler.value?(.play)
+        store.dispatchRemoteCommand(.play)
         #expect(store.isPlaying == true)
     }
 
@@ -1003,15 +987,14 @@ struct PlaylistStoreTests {
     func remoteCommand_nextPrevious_dispatch() async {
         // Arrange
         let played = Box<[String]>([])
-        let remoteHandler = Box<(@MainActor @Sendable (RemoteCommand) -> Void)?>(nil)
         let store = PlaylistStore(
             playerProxy: recordingProxy(played: played),
-            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]), remoteHandler: remoteHandler)
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]))
         )
         await store.start(playlist: assets, from: 0)
 
         // Act: .next で次の動画へ（ディスパッチは Task のため完了を待つ）
-        remoteHandler.value?(.next)
+        store.dispatchRemoteCommand(.next)
         await waitUntil { store.currentIndex == 1 && !store.isPreparingItem }
 
         // Assert
@@ -1019,7 +1002,7 @@ struct PlaylistStoreTests {
         #expect(played.value == ["a", "b"])
 
         // Act: .previous で前の動画へ
-        remoteHandler.value?(.previous)
+        store.dispatchRemoteCommand(.previous)
         await waitUntil { store.currentIndex == 0 && !store.isPreparingItem }
 
         // Assert
@@ -1033,16 +1016,15 @@ struct PlaylistStoreTests {
         let played = Box<[String]>([])
         let seeked = Box<[TimeInterval]>([])
         let progressHandler = Box<(@MainActor @Sendable (PlaybackProgress) -> Void)?>(nil)
-        let remoteHandler = Box<(@MainActor @Sendable (RemoteCommand) -> Void)?>(nil)
         let store = PlaylistStore(
             playerProxy: recordingProxy(played: played, seeked: seeked, progressHandler: progressHandler),
-            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]), remoteHandler: remoteHandler)
+            nowPlayingInfoProxy: recordingNowPlayingProxy(infos: Box([]))
         )
         await store.start(playlist: assets, from: 0)
         progressHandler.value?(PlaybackProgress(currentTime: 0, duration: 10))
 
         // Act
-        remoteHandler.value?(.seek(5))
+        store.dispatchRemoteCommand(.seek(5))
 
         // Assert: Proxy へシークが委譲され、進捗にも即時反映される
         #expect(seeked.value == [5])

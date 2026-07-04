@@ -1,2 +1,5 @@
 # Xcode - User-specific files
 xcuserdata/
+
+# Code coverage artifacts
+*.profraw

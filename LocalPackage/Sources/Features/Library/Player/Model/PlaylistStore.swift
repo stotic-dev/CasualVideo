@@ -69,9 +69,6 @@ final class PlaylistStore {
     /// 再生進捗オブザーバを一度だけ登録したかどうか。
     private var hasObservedProgress = false
 
-    /// リモートコマンドオブザーバを一度だけ登録したかどうか。
-    private var hasObservedRemoteCommand = false
-
     init(
         playerProxy: VideoPlayerProxy,
         nowPlayingInfoProxy: NowPlayingInfoProxy,
@@ -136,7 +133,6 @@ final class PlaylistStore {
         playlist = assets
         registerDidPlayToEndIfNeeded()
         registerProgressObserverIfNeeded()
-        registerRemoteCommandObserverIfNeeded()
         // 再生開始前にデフォルト（ミュート・速度 / F-7）を再生エンジンへ適用する。
         // player レベルで保持されるため、以降の item 差し替え後も有効。
         playerProxy.setMuted(isMuted)
@@ -166,6 +162,39 @@ final class PlaylistStore {
         await play(orderPosition: previous)
     }
 
+    /// Cast 中の連続再生・next 操作用に、ローカル再生を起こさず再生位置だけ次へ進める。
+    ///
+    /// 再生面が Cast デバイスに一本化されている間（`PlaybackStore.isCasting`）、端末側の AVPlayer は
+    /// 動かさずプレイリストの位置のみ前進させ、進めた先のアセットを返す。`PlaybackStore` がその
+    /// アセットを Cast へロードする。末尾（リピートなし）なら `nil` を返し連続再生を終了する。
+    /// リピート（all / one）時は要素があれば常に進める。
+    func advanceForCastNext() -> VideoAsset? {
+        // 1 曲リピートは同じ位置を維持して同じアセットを返す（Cast 側で再ロードして繰り返す）。
+        if repeatMode == .one {
+            return currentAsset
+        }
+        guard let next = nextOrderPosition(wrapping: repeatMode == .all) else { return nil }
+        orderPosition = next
+        return currentAsset
+    }
+
+    /// Cast 中の previous 操作用に、ローカル再生を起こさず再生位置だけ前へ戻し、そのアセットを返す。
+    ///
+    /// リピート（all / one）時は先頭から末尾へ回る。先頭（リピートなし）なら現在位置を維持する。
+    func advanceForCastPrevious() -> VideoAsset? {
+        guard let orderPosition, !order.isEmpty else { return currentAsset }
+        let previous: Int
+        if orderPosition - 1 >= 0 {
+            previous = orderPosition - 1
+        } else if repeatMode != .off {
+            previous = order.count - 1
+        } else {
+            return currentAsset
+        }
+        self.orderPosition = previous
+        return currentAsset
+    }
+
     /// 再生順序モード（連続 / シャッフル）を設定する。
     ///
     /// 現在再生中の動画は維持したまま、以降の順序を再構築する。
@@ -191,6 +220,17 @@ final class PlaylistStore {
     /// リピートモードを循環的に切り替える（off → all → one → off）。
     func cycleRepeatMode() {
         repeatMode = repeatMode.next
+    }
+
+    /// 外部要因（Cast 接続中など）でローカル再生だけを止めるための一時停止。
+    ///
+    /// セッション（プレイリスト・再生位置）は保持したまま再生エンジンのみ止める。
+    /// 既に停止中なら何もしない（idempotent）。
+    func pause() {
+        guard isPlaying else { return }
+        playerProxy.pause()
+        isPlaying = false
+        updateNowPlayingInfo()
     }
 
     /// 再生 / 一時停止をトグルする。
@@ -315,16 +355,11 @@ final class PlaylistStore {
         }
     }
 
-    private func registerRemoteCommandObserverIfNeeded() {
-        guard !hasObservedRemoteCommand else { return }
-        hasObservedRemoteCommand = true
-        nowPlayingInfoProxy.observeRemoteCommand { [weak self] command in
-            self?.handleRemoteCommand(command)
-        }
-    }
-
     /// リモートコマンド（ロック画面 / コントロールセンター等）を既存の再生操作へディスパッチする。
-    private func handleRemoteCommand(_ command: RemoteCommand) {
+    ///
+    /// リモートコマンドの購読は `PlaybackStore` で一元管理し、ローカル再生中はこのメソッドへ転送する
+    /// （Cast 中は `PlaybackStore` が Cast 操作へ振り分けるため、ここへは来ない）。
+    func dispatchRemoteCommand(_ command: RemoteCommand) {
         switch command {
         case .play:
             guard !isPlaying else { return }

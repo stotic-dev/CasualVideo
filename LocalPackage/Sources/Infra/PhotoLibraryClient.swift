@@ -10,6 +10,7 @@ import AVFoundation
 import CoreGraphics
 import Foundation
 import Photos
+import UniformTypeIdentifiers
 
 #if canImport(UIKit)
 import UIKit
@@ -37,6 +38,22 @@ public struct PhotoVideoAlbum: Sendable, Hashable {
     public let videoCount: Int
     /// アルバムを代表するサムネイル用アセット（通常は最新の動画）の識別子。取得できない場合は nil。
     public let thumbnailLocalIdentifier: String?
+}
+
+/// PhotoKit アセットを一時領域へ書き出した結果（ローカル HTTP 配信元のファイル）。
+///
+/// Chromecast へ渡すローカル動画は、実ファイルとその MIME タイプが要る。`App` の assemble 層が
+/// このファイルをローカル HTTP サーバへ登録し、得られた URL を Cast へロードする。
+public struct ExportedVideoFile: Sendable, Hashable {
+    /// 書き出したローカル動画ファイルの URL（file://）。
+    public let fileURL: URL
+    /// 動画の MIME タイプ（例: `video/mp4`）。Cast の contentType に用いる。
+    public let mimeType: String
+
+    public init(fileURL: URL, mimeType: String) {
+        self.fileURL = fileURL
+        self.mimeType = mimeType
+    }
 }
 
 /// 写真ライブラリへのアクセス許可状態（PhotoKit 由来）。
@@ -184,6 +201,72 @@ public struct PhotoLibraryClient: Sendable {
             }
         }
         return box.item
+    }
+
+    /// 指定アセットの動画実体を一時ディレクトリへ書き出し、ファイル URL と MIME タイプを返す。
+    ///
+    /// Chromecast はローカル（PhotoKit）アセットを直接読めないため、HTTP 配信元となる実ファイルが要る。
+    /// `PHAssetResourceManager` で元データをアプリの一時領域へコピーして配信可能な形にする。
+    /// iCloud 上の動画もネットワーク経由で取得できるよう `isNetworkAccessAllowed` を有効にする。
+    /// 取得できない（アセットが存在しない／書き出し失敗）場合は nil。
+    public func exportVideoFile(localIdentifier: String) async -> ExportedVideoFile? {
+        let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [localIdentifier], options: nil)
+        guard let asset = fetch.firstObject else { return nil }
+
+        // 動画本体のリソースを選ぶ（フル動画 → なければ最初の動画系リソース）。
+        let resources = PHAssetResource.assetResources(for: asset)
+        guard let resource = resources.first(where: { $0.type == .fullSizeVideo })
+            ?? resources.first(where: { $0.type == .video })
+            ?? resources.first
+        else { return nil }
+
+        let mimeType = Self.mimeType(for: resource)
+        let fileExtension = Self.fileExtension(for: resource)
+        // 同一アセットは同名ファイルへ書き出し、再ロード時に再エクスポートを避ける。
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CastExports", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let sanitized = localIdentifier.replacingOccurrences(of: "/", with: "_")
+        let fileURL = directory.appendingPathComponent("\(sanitized).\(fileExtension)")
+
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            return ExportedVideoFile(fileURL: fileURL, mimeType: mimeType)
+        }
+
+        let options = PHAssetResourceRequestOptions()
+        options.isNetworkAccessAllowed = true
+
+        let didWrite: Bool = await withCheckedContinuation { continuation in
+            PHAssetResourceManager.default().writeData(
+                for: resource,
+                toFile: fileURL,
+                options: options
+            ) { error in
+                continuation.resume(returning: error == nil)
+            }
+        }
+        guard didWrite else {
+            try? FileManager.default.removeItem(at: fileURL)
+            return nil
+        }
+        return ExportedVideoFile(fileURL: fileURL, mimeType: mimeType)
+    }
+
+    /// リソースの UTI から MIME タイプを推定する。判定不能時は汎用 `video/mp4` を返す。
+    private static func mimeType(for resource: PHAssetResource) -> String {
+        if let type = UTType(resource.uniformTypeIdentifier), let mime = type.preferredMIMEType {
+            return mime
+        }
+        return "video/mp4"
+    }
+
+    /// リソースの元ファイル名 or UTI から拡張子を推定する。判定不能時は `mp4`。
+    private static func fileExtension(for resource: PHAssetResource) -> String {
+        let ext = (resource.originalFilename as NSString).pathExtension
+        if !ext.isEmpty { return ext.lowercased() }
+        if let type = UTType(resource.uniformTypeIdentifier), let preferred = type.preferredFilenameExtension {
+            return preferred
+        }
+        return "mp4"
     }
 
     private static func normalize(_ status: PHAuthorizationStatus) -> PhotoLibraryAuthorization {
