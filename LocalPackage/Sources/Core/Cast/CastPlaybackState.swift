@@ -18,8 +18,19 @@ public struct CastPlaybackState: Sendable, Equatable {
     /// Cast デバイスで再生中か（再生 = true / 一時停止・停止 = false）。
     public var isPlaying: Bool
 
-    public init(progress: PlaybackProgress = PlaybackProgress(), isPlaying: Bool = false) {
+    /// Cast デバイス側で 1 本の再生が（最後まで）終了したか。
+    ///
+    /// 連続再生の起点に用いる。Cast デバイスがメディアの末尾に到達して停止したときに true となる。
+    /// この検知をもとに `PlaybackStore` が次の動画を Cast へロードする（F-4 / 連続再生）。
+    public var didFinish: Bool
+
+    public init(
+        progress: PlaybackProgress = PlaybackProgress(),
+        isPlaying: Bool = false,
+        didFinish: Bool = false
+    ) {
         self.progress = progress
         self.isPlaying = isPlaying
+        self.didFinish = didFinish
     }
 }

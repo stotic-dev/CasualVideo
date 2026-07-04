@@ -171,12 +171,16 @@ public final class CastClient: NSObject {
         guard let client = currentRemoteMediaClient() else { return }
         let position = client.approximateStreamPosition()
         let duration = client.mediaStatus?.mediaInformation?.streamDuration ?? 0
-        let isPlaying = client.mediaStatus?.playerState == .playing
+        let playerState = client.mediaStatus?.playerState
+        let isPlaying = playerState == .playing
+        // 1 本の再生が末尾まで到達して停止した（idle かつ idleReason == finished）ことを連続再生の起点として検知する。
+        let didFinish = playerState == .idle && client.mediaStatus?.idleReason == .finished
         remoteStateHandler?(
             RemotePlaybackSnapshot(
                 position: position.isFinite ? position : 0,
                 duration: duration.isFinite ? duration : 0,
-                isPlaying: isPlaying
+                isPlaying: isPlaying,
+                didFinish: didFinish
             )
         )
     }

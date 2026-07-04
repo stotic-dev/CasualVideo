@@ -37,6 +37,8 @@ public struct RootScreen: View {
     @State private var systemRouteCastClient = SystemRouteCastClient()
     // ローカル動画を LAN 上で HTTP 配信するサーバ。Cast セッション中ずっと生存させる必要があるため安定保持する。
     @State private var mediaServer = LocalMediaServer()
+    // Cast 接続中のバックグラウンド維持（無音オーディオ keep-alive）の窓口。AVAudioEngine を生存させ続けるため安定保持する。
+    @State private var silentAudioKeepAliveClient = SilentAudioKeepAliveClient()
 
     // MARK: Storeの保持
     
@@ -150,7 +152,8 @@ public struct RootScreen: View {
                     photoLibraryClient: photoLibraryClient
                 ),
                 settingsStore: settingsStore,
-                castProxy: castProxy
+                castProxy: castProxy,
+                silentAudioKeepAliveProxy: .live(client: silentAudioKeepAliveClient)
             )
             isInitialized = true
         }

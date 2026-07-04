@@ -72,17 +72,21 @@ public final class PlaybackStore {
     private let settingsStore: SettingsStore
     /// Chromecast 操作の抽象。セッション接続購読・メディアロードを委譲する。
     private let castProxy: CastProxy
+    /// Cast 接続中のバックグラウンド維持（無音オーディオ keep-alive）の抽象。
+    private let silentAudioKeepAliveProxy: SilentAudioKeepAliveProxy
 
     public init(
         playerProxy: VideoPlayerProxy,
         nowPlayingInfoProxy: NowPlayingInfoProxy,
         settingsStore: SettingsStore,
-        castProxy: CastProxy = CastProxy()
+        castProxy: CastProxy = CastProxy(),
+        silentAudioKeepAliveProxy: SilentAudioKeepAliveProxy = SilentAudioKeepAliveProxy()
     ) {
         self.playerProxy = playerProxy
         self.nowPlayingInfoProxy = nowPlayingInfoProxy
         self.settingsStore = settingsStore
         self.castProxy = castProxy
+        self.silentAudioKeepAliveProxy = silentAudioKeepAliveProxy
         // 未再生時の空セッション。start() で実プレイリストの Store に差し替える。
         self.playlistStore = PlaylistStore(playerProxy: playerProxy, nowPlayingInfoProxy: nowPlayingInfoProxy)
 
@@ -105,9 +109,15 @@ public final class PlaybackStore {
             self?.playlistStore.currentAsset?.id
         }
 
-        // Cast デバイス側の再生状態を購読し、再生画面の同期に用いる。
+        // Cast デバイス側の再生状態を購読し、再生画面の同期・Now Playing 更新・連続再生に用いる。
         castProxy.observeRemoteState { [weak self] state in
-            self?.castState = state
+            self?.handleCastRemoteState(state)
+        }
+
+        // ロック画面 / コントロールセンターのリモートコマンドを一元購読する（F-5）。
+        // Cast 中は Cast デバイスへ転送し、ローカル再生中はローカルのプレイリストへ転送する。
+        nowPlayingInfoProxy.observeRemoteCommand { [weak self] command in
+            self?.handleRemoteCommand(command)
         }
     }
 
@@ -143,6 +153,8 @@ public final class PlaybackStore {
         playerProxy.stop()
         nowPlayingInfoProxy.clearNowPlayingInfo()
         playerProxy.deactivateAudioSession()
+        // Cast 用の無音 keep-alive を稼働させていれば止める（idempotent）。
+        silentAudioKeepAliveProxy.stop()
         // セッションを破棄: 空の新規 PlaylistStore に差し替え、進行状態を未開始へ戻す。
         playlistStore = PlaylistStore(playerProxy: playerProxy, nowPlayingInfoProxy: nowPlayingInfoProxy)
         phase = .idle
@@ -163,11 +175,80 @@ public final class PlaybackStore {
             isCasting = true
             // 端末側の再生は止める（Cast 中はローカルプレイヤーを再生させない）。
             playlistStore.pause()
+            // Cast 中もロック画面操作を受け取り続けられるよう、無音オーディオでバックグラウンドを維持する。
+            silentAudioKeepAliveProxy.start()
             guard let asset = playlistStore.currentAsset else { return }
             Task { _ = await castProxy.loadAndPlay(asset.id) }
         case .disconnected:
             isCasting = false
             castState = CastPlaybackState()
+            // Cast が切れたら keep-alive は不要。バックグラウンド維持を止める。
+            silentAudioKeepAliveProxy.stop()
+        }
+    }
+
+    /// Cast デバイス側の再生状態の更新を処理する。
+    ///
+    /// 1) シークバー・再生/一時停止ボタンの同期のため `castState` を更新する。
+    /// 2) Now Playing 情報（ロック画面 / コントロールセンター）を Cast 側の状態で更新する（F-5）。
+    /// 3) 1 本の再生が終了（`didFinish`）したら、プレイリストの次の動画を Cast へ自動ロードする（連続再生）。
+    private func handleCastRemoteState(_ state: CastPlaybackState) {
+        // 終了検知の重複発火を避けるため、前回からの遷移を見る。
+        let didJustFinish = state.didFinish && !castState.didFinish
+        castState = state
+
+        // Cast 側の再生状態で Now Playing を更新する（タイトル・長さ・位置・再生中フラグ）。
+        updateCastNowPlayingInfo()
+
+        guard didJustFinish else { return }
+        // 次の動画があれば Cast へロードする（無ければ連続再生終了）。
+        guard let next = playlistStore.advanceForCastNext() else { return }
+        Task { _ = await castProxy.loadAndPlay(next.id) }
+    }
+
+    /// Cast 側の再生状態から `NowPlayingInfo` を構築し、ロック画面 / コントロールセンターへ反映する（F-5）。
+    private func updateCastNowPlayingInfo() {
+        guard isCasting else { return }
+        let info = NowPlayingInfo(
+            title: "CasualVideo",
+            duration: castState.progress.duration,
+            elapsedTime: castState.progress.currentTime,
+            isPlaying: castState.isPlaying,
+            rate: .normal,
+            assetID: playlistStore.currentAsset?.id
+        )
+        nowPlayingInfoProxy.updateNowPlayingInfo(info)
+    }
+
+    // MARK: - リモートコマンドの振り分け
+
+    /// ロック画面 / コントロールセンターのリモートコマンドを、再生面（Cast / ローカル）に応じて振り分ける（F-5）。
+    ///
+    /// Cast 中は Cast デバイスへ転送し、next/previous はプレイリストの次/前を Cast へロードする。
+    /// 非 Cast 時は従来どおりローカルのプレイリストへ転送する。
+    private func handleRemoteCommand(_ command: RemoteCommand) {
+        guard isCasting else {
+            playlistStore.dispatchRemoteCommand(command)
+            return
+        }
+
+        switch command {
+        case .play:
+            guard !castState.isPlaying else { return }
+            castTogglePlayPause()
+        case .pause:
+            guard castState.isPlaying else { return }
+            castTogglePlayPause()
+        case .toggle:
+            castTogglePlayPause()
+        case .next:
+            guard let next = playlistStore.advanceForCastNext() else { return }
+            Task { _ = await castProxy.loadAndPlay(next.id) }
+        case .previous:
+            guard let previous = playlistStore.advanceForCastPrevious() else { return }
+            Task { _ = await castProxy.loadAndPlay(previous.id) }
+        case .seek(let seconds):
+            castSeek(to: seconds)
         }
     }
 

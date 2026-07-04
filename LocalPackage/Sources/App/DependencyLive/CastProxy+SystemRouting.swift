@@ -72,7 +72,8 @@ extension CastProxy {
                     handler(
                         CastPlaybackState(
                             progress: PlaybackProgress(currentTime: snapshot.position, duration: snapshot.duration),
-                            isPlaying: snapshot.isPlaying
+                            isPlaying: snapshot.isPlaying,
+                            didFinish: snapshot.didFinish
                         )
                     )
                 }

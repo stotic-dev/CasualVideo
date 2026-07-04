@@ -19,10 +19,13 @@ public struct RemotePlaybackSnapshot: Sendable, Equatable {
     public let duration: TimeInterval
     /// 再生中か（再生 = true / 一時停止・停止 = false）。
     public let isPlaying: Bool
+    /// 1 本の再生が末尾まで到達して終了したか（連続再生の起点）。
+    public let didFinish: Bool
 
-    public init(position: TimeInterval, duration: TimeInterval, isPlaying: Bool) {
+    public init(position: TimeInterval, duration: TimeInterval, isPlaying: Bool, didFinish: Bool = false) {
         self.position = position
         self.duration = duration
         self.isPlaying = isPlaying
+        self.didFinish = didFinish
     }
 }
