@@ -2,7 +2,7 @@
 
 App Store Connect へ同期するメタ情報（リリースノート・スクリーンショット）を管理するディレクトリ。
 
-Xcode Cloud の **Release ワークフロー**（`vN.N.N` タグ起動）で `ci_scripts/ci_post_xcodebuild.sh` が実行され、
+Xcode Cloud の **PreRelease ワークフロー**（`vN.N.N` タグ起動）で `ci_scripts/ci_post_xcodebuild.sh` が実行され、
 [asc-metadata-cli](https://github.com/stotic-dev/asc-metadata-cli) がこのディレクトリの内容を
 App Store Connect に同期する（新バージョン作成 + リリースノート + スクリーンショット）。
 
@@ -27,12 +27,12 @@ metadata/
 
 1. このバージョンで公開する `release_notes.txt` / スクリーンショットを更新してコミットする。
 2. `vN.N.N`（例: `v1.1.0`）のタグを打つ。
-3. Xcode Cloud の Release ワークフローがタグ起動し、アーカイブ後に `ci_post_xcodebuild.sh` がメタ情報を同期する。
+3. Xcode Cloud の PreRelease ワークフローがタグ起動し、アーカイブ後に `ci_post_xcodebuild.sh` がメタ情報を同期する。
    - バージョン番号はタグ（`v` を除いた `N.N.N`）から読み取られる。
 
 ## 事前設定（Xcode Cloud の環境変数 / Secret）
 
-Release ワークフローに以下の Secret を登録しておくこと（App Store Connect API キー・ロールは App Manager 以上）。
+PreRelease ワークフローに以下の Secret を登録しておくこと（App Store Connect API キー・ロールは App Manager 以上）。
 
 | 環境変数 | 内容 |
 |---|---|

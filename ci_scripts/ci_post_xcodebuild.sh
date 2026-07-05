@@ -4,7 +4,7 @@
 # ci_post_xcodebuild.sh
 #
 # Xcode Cloud の xcodebuild アクション完了後に実行されるフック。
-# Release ワークフローのときに、リポジトリ内の metadata/ を元に
+# PreRelease ワークフローのときに、リポジトリ内の metadata/ を元に
 # App Store Connect へ以下を同期する。
 #
 #   - 新バージョンの作成（既に存在すれば再利用）
@@ -23,9 +23,9 @@ set -eu
 
 # --- 実行条件の判定 -------------------------------------------------------
 
-# Release ワークフロー以外ではスキップ（テスト/開発ワークフロー等）
-if [ "${CI_WORKFLOW:-}" != "Release" ]; then
-    echo "[asc-metadata] CI_WORKFLOW='${CI_WORKFLOW:-}' is not 'Release'. Skip metadata sync."
+# PreRelease ワークフロー以外ではスキップ（テスト/開発ワークフロー等）
+if [ "${CI_WORKFLOW:-}" != "PreRelease" ]; then
+    echo "[asc-metadata] CI_WORKFLOW='${CI_WORKFLOW:-}' is not 'PreRelease'. Skip metadata sync."
     exit 0
 fi
 

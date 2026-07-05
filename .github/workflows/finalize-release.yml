@@ -1,0 +1,75 @@
+name: Finalize Release
+
+# PreRelease ワークフローが作成した `release/v<version>` PR が
+# main にマージされたときに発火する。
+#
+#   1. マージされた release ブランチ名から <version> を抽出
+#   2. main の最新コミットに `v<version>` タグを作成 / push
+#   3. GitHub Release を作成
+#
+# 作成された `v<version>` タグの push をトリガーに、Xcode Cloud 側の
+# PreRelease ワークフローが発火し、ipa のアップロードや新規バージョンの
+# 追加（App Store Connect への同期）を行う。
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+concurrency:
+  group: finalize-release-${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    name: Tag & GitHub Release
+    # マージされ、かつ release/v* ブランチ由来の PR のみ対象
+    if: >-
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'release/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Resolve version
+        id: version
+        run: |
+          # ブランチ名 release/v1.2.0 から v1.2.0 / 1.2.0 を取り出す
+          HEAD_REF="${{ github.event.pull_request.head.ref }}"
+          TAG="${HEAD_REF#release/}"
+          VERSION="${TAG#v}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::ブランチ名からバージョンを解決できません: $HEAD_REF"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create & push tag
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::タグ $TAG は既に存在します"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --target "${{ github.event.pull_request.merge_commit_sha }}" \
+            --notes "${{ github.event.pull_request.body }}"
