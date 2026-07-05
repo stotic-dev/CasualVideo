@@ -1,0 +1,127 @@
+name: PreRelease
+
+# 手動トリガーでリリース準備を行うワークフロー。
+#
+#   1. `release/v<version>` ブランチを作成
+#   2. アプリのバージョン（MARKETING_VERSION）を <version> に更新
+#   3. 変更をコミットして push
+#   4. main 向けのマージ PR を作成（body にリリース内容を記載）
+#
+# この PR が main にマージされると Finalize Release ワークフローが発火し、
+# `v<version>` のタグ / GitHub Release を作成する。
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "リリースバージョン (例: 1.2.0 / 先頭の v は不要)"
+        required: true
+        type: string
+
+concurrency:
+  group: pre-release-${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    name: Prepare release branch & PR
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Normalize version
+        id: version
+        run: |
+          # 先頭の v を除去して正規化（1.2.0 形式に統一）
+          RAW="${{ inputs.version }}"
+          VERSION="${RAW#v}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::バージョンは n.n.n 形式で指定してください (入力値: $RAW)"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "branch=release/v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create release branch
+        run: |
+          BRANCH="${{ steps.version.outputs.branch }}"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "::error::ブランチ $BRANCH は既に存在します"
+            exit 1
+          fi
+          git switch -c "$BRANCH"
+
+      - name: Bump app version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Debug / Release 両構成の MARKETING_VERSION を更新
+          xcrun agvtool new-marketing-version "$VERSION"
+          echo "--- 更新後の MARKETING_VERSION ---"
+          grep -n "MARKETING_VERSION" CasualVideo.xcodeproj/project.pbxproj
+
+      - name: Commit & push
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BRANCH="${{ steps.version.outputs.branch }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "::error::バージョン変更による差分がありません"
+            exit 1
+          fi
+          git commit -am "chore: バージョンを ${VERSION} に更新"
+          git push origin "$BRANCH"
+
+      - name: Build PR body
+        id: body
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          # 直近のリリースタグ以降のコミットをリリース内容として列挙
+          LAST_TAG=$(git describe --tags --abbrev=0 --match 'v*' origin/main 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            RANGE="${LAST_TAG}..origin/main"
+            COMPARE="前回リリース \`${LAST_TAG}\` からの変更"
+          else
+            RANGE="origin/main"
+            COMPARE="初回リリース時点の変更"
+          fi
+          CHANGES=$(git log --no-merges --pretty=format:'- %s (%h)' $RANGE)
+          [ -z "$CHANGES" ] && CHANGES="- （コミットなし）"
+
+          {
+            echo "body<<EOF"
+            echo "## リリース \`${TAG}\`"
+            echo ""
+            echo "このPRは \`${VERSION}\` のリリース準備です。マージすると Finalize Release ワークフローが発火し、\`${TAG}\` のタグと GitHub Release を作成します。"
+            echo ""
+            echo "### このPR自体の変更"
+            echo "- アプリのバージョン (MARKETING_VERSION) を \`${VERSION}\` に更新"
+            echo ""
+            echo "### ${COMPARE}"
+            echo "$CHANGES"
+            echo ""
+            echo "---"
+            echo "> このPRは PreRelease ワークフローによって自動生成されました。"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BRANCH="${{ steps.version.outputs.branch }}"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Release ${VERSION}" \
+            --body "${{ steps.body.outputs.body }}"

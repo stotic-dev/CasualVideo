@@ -1,2 +1,5 @@
 # Xcode - User-specific files
 xcuserdata/
+
+# Swift Package Manager build artifacts (CI 用 plugin パッケージ等)
+.build/
