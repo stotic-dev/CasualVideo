@@ -193,6 +193,17 @@ final class PlaylistStore {
         repeatMode = repeatMode.next
     }
 
+    /// 外部要因（Cast 接続中など）でローカル再生だけを止めるための一時停止。
+    ///
+    /// セッション（プレイリスト・再生位置）は保持したまま再生エンジンのみ止める。
+    /// 既に停止中なら何もしない（idempotent）。
+    func pause() {
+        guard isPlaying else { return }
+        playerProxy.pause()
+        isPlaying = false
+        updateNowPlayingInfo()
+    }
+
     /// 再生 / 一時停止をトグルする。
     ///
     /// セットアップ中（`isPreparingItem`）は操作を受け付けない。再生エンジンの操作は Proxy へ委譲する。

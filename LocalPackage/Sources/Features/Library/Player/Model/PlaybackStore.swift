@@ -19,6 +19,7 @@
 //
 
 import Core
+import Foundation
 import Observation
 
 /// 再生中のセッション状態を管理する Store。連続再生 Store の生成・保持と全画面プレイヤーの提示状態を持つ。
@@ -57,19 +58,31 @@ public final class PlaybackStore {
     /// PIP へ移行すると false（モーダルは閉じるがセッションは生存）。PIP の「戻る」で true に戻る。
     public var isPlayerPresented = false
 
+    /// Chromecast 接続中かどうか。接続時は再生中アセットを Cast デバイスへ引き継ぐ。
+    public private(set) var isCasting = false
+
+    /// Cast デバイス側の再生状態（位置・長さ・再生中か）。
+    ///
+    /// Cast 接続中は周期的に更新され、再生画面のシークバー・再生/一時停止ボタンの同期に用いる。
+    public private(set) var castState = CastPlaybackState()
+
     private let playerProxy: VideoPlayerProxy
     private let nowPlayingInfoProxy: NowPlayingInfoProxy
     /// 再生開始時の初期値（ミュート・速度 / F-7）を供給する設定 Store。
     private let settingsStore: SettingsStore
+    /// Chromecast 操作の抽象。セッション接続購読・メディアロードを委譲する。
+    private let castProxy: CastProxy
 
     public init(
         playerProxy: VideoPlayerProxy,
         nowPlayingInfoProxy: NowPlayingInfoProxy,
-        settingsStore: SettingsStore
+        settingsStore: SettingsStore,
+        castProxy: CastProxy = CastProxy()
     ) {
         self.playerProxy = playerProxy
         self.nowPlayingInfoProxy = nowPlayingInfoProxy
         self.settingsStore = settingsStore
+        self.castProxy = castProxy
         // 未再生時の空セッション。start() で実プレイリストの Store に差し替える。
         self.playlistStore = PlaylistStore(playerProxy: playerProxy, nowPlayingInfoProxy: nowPlayingInfoProxy)
 
@@ -77,6 +90,24 @@ public final class PlaybackStore {
         // 再提示するだけで再生を中断せず元の状態（位置・順序）から続けられる。
         playerProxy.observePictureInPictureRestore { [weak self] in
             self?.isPlayerPresented = true
+        }
+
+        // Cast セッションの接続を購読する。接続時に現在再生中のローカル動画を Chromecast へ引き継ぐ
+        // （ローカルアセットの書き出し・HTTP 配信・ロードは CastProxy の本番実装が App で組み立てる）。
+        castProxy.observeSessionState { [weak self] state in
+            self?.handleCastSessionState(state)
+        }
+
+        // AVSystemRouting 経路向けに、現在再生中アセットの ID プロバイダを登録する。
+        // ルート選択（.activate）時にバックエンドがこれを引き、対象アセットを送出する。
+        // GoogleCast 経路では no-op（既定実装）。
+        castProxy.setNowPlayingAssetProvider { [weak self] in
+            self?.playlistStore.currentAsset?.id
+        }
+
+        // Cast デバイス側の再生状態を購読し、再生画面の同期に用いる。
+        castProxy.observeRemoteState { [weak self] state in
+            self?.castState = state
         }
     }
 
@@ -120,6 +151,49 @@ public final class PlaybackStore {
     }
 
     // MARK: - Private
+
+    /// Cast セッションの接続状態変化に応じて、再生中アセットの引き継ぎを行う。
+    ///
+    /// 接続時は端末側のローカル再生を止めたうえで、現在再生中のアセットを Chromecast へ
+    /// ロードして再生する（再生面は Chromecast に一本化し、二重再生を避ける）。
+    /// セッション（プレイリスト・再生位置）は保持するため、切断後はその位置から再開できる。
+    private func handleCastSessionState(_ state: CastSessionState) {
+        switch state {
+        case .connected:
+            isCasting = true
+            // 端末側の再生は止める（Cast 中はローカルプレイヤーを再生させない）。
+            playlistStore.pause()
+            guard let asset = playlistStore.currentAsset else { return }
+            Task { _ = await castProxy.loadAndPlay(asset.id) }
+        case .disconnected:
+            isCasting = false
+            castState = CastPlaybackState()
+        }
+    }
+
+    // MARK: - Cast デバイスの再生操作
+
+    /// Cast デバイスの再生 / 一時停止をトグルする。
+    ///
+    /// Cast 中の再生画面コントロールから呼ぶ。現在の Cast 状態に応じて操作を送り、
+    /// 表示の追従性のため `castState.isPlaying` を楽観的に即時反映する（次のポーリングで実値に収束）。
+    public func castTogglePlayPause() {
+        if castState.isPlaying {
+            castProxy.pause()
+            castState.isPlaying = false
+        } else {
+            castProxy.play()
+            castState.isPlaying = true
+        }
+    }
+
+    /// Cast デバイスを指定秒へシークする。
+    ///
+    /// 表示の追従性のため `castState.progress.currentTime` を即時反映する（次のポーリングで実値に収束）。
+    public func castSeek(to seconds: TimeInterval) {
+        castProxy.seek(seconds)
+        castState.progress.currentTime = seconds
+    }
 
     private func presentAndLoad(startIndex: Int, provider: @escaping () async -> [VideoAsset]) {
         // 取得を待たずに全画面プレイヤーを提示し、ローディングを見せる。

@@ -42,4 +42,14 @@ public struct UserDefaultsClient: @unchecked Sendable {
     public func setDouble(_ value: Double, forKey key: String) {
         defaults.set(value, forKey: key)
     }
+
+    /// 指定キーの `String` を返す。未設定なら nil。
+    public func string(forKey key: String) -> String? {
+        defaults.string(forKey: key)
+    }
+
+    /// 指定キーへ `String` を保存する。
+    public func setString(_ value: String, forKey key: String) {
+        defaults.set(value, forKey: key)
+    }
 }
